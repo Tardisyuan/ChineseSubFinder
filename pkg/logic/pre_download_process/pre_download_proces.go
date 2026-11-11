@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/local_http_proxy_server"
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/sub_supplier/subtitle_best"
 	"time"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/file_downloader"
 	subSupplier "github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/sub_supplier"
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/sub_supplier/a4k"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/sub_supplier/assrt"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/sub_supplier/shooter"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/sub_supplier/xunlei"
@@ -21,6 +19,7 @@ import (
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/notify_center"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/settings"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/something_static"
+	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/types/backend"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/url_connectedness_helper"
 	"github.com/sirupsen/logrus"
 )
@@ -31,6 +30,7 @@ type PreDownloadProcess struct {
 	log            *logrus.Logger
 	fileDownloader *file_downloader.FileDownloader
 	SubSupplierHub *subSupplier.SubSupplierHub
+	SiteStatus     backend.ReplyCheckStatus // result of the last CheckSubSiteStatus, shown on the overview page
 }
 
 func NewPreDownloadProcess(_fileDownloader *file_downloader.FileDownloader) *PreDownloadProcess {
@@ -108,19 +108,13 @@ func (p *PreDownloadProcess) Init() *PreDownloadProcess {
 			//zimuku.NewSupplier(p.fileDownloader),
 			xunlei.NewSupplier(p.fileDownloader),
 			shooter.NewSupplier(p.fileDownloader),
-			a4k.NewSupplier(p.fileDownloader),
+			// a4k.net has been a parked domain since late 2023, so it is left out
 		)
 
 		if settings.Get().SubtitleSources.AssrtSettings.Enabled == true &&
 			settings.Get().SubtitleSources.AssrtSettings.Token != "" {
 			// 如果开启了 ASSRt 字幕源，则需要新增
 			p.SubSupplierHub.AddSubSupplier(assrt.NewSupplier(p.fileDownloader))
-		}
-
-		if settings.Get().SubtitleSources.SubtitleBestSettings.Enabled == true &&
-			settings.Get().SubtitleSources.SubtitleBestSettings.ApiKey != "" {
-			// 如果开启了 SubtitleBest 字幕源，则需要新增
-			p.SubSupplierHub.AddSubSupplier(subtitle_best.NewSupplier(p.fileDownloader))
 		}
 
 		if pkg.LiteMode() == false {
@@ -180,7 +174,7 @@ func (p *PreDownloadProcess) Check() *PreDownloadProcess {
 	}
 	// ------------------------------------------------------------------------
 	// 测试提供字幕的网站是有效的，是否下载次数超限
-	p.SubSupplierHub.CheckSubSiteStatus()
+	p.SiteStatus = p.SubSupplierHub.CheckSubSiteStatus()
 	// ------------------------------------------------------------------------
 	// 判断文件夹是否存在
 	if len(settings.Get().CommonSettings.MoviePaths) < 1 {

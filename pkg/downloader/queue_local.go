@@ -3,6 +3,7 @@ package downloader
 import (
 	"fmt"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/settings"
+	"runtime/debug"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg"
 
@@ -27,6 +28,10 @@ func (d *Downloader) queueDownloaderLocal() {
 		d.downloaderLock.Unlock()
 		d.log.Debugln("Download.QueueDownloader() End")
 	}()
+	if d.subSupplierHub == nil {
+		d.log.Infoln("Wait SupplierCheck Update *subSupplierHub, QueueDownloader Skip this time")
+		return
+	}
 
 	var downloadCounter int64
 	downloadCounter = 0
@@ -254,14 +259,15 @@ func (d *Downloader) queueDownloaderLocal() {
 	done := make(chan interface{}, 1)
 	// 接收内部任务的 panic
 	panicChan := make(chan interface{}, 1)
+	// Both channels are buffered and never closed: a closed panicChan is always ready, so
+	// select could pick it after a normal finish and re-panic with nil.
 
 	go func() {
 		defer func() {
 			if p := recover(); p != nil {
-				panicChan <- p
+				// Keep the original stack; re-panicking in the caller only shows the select.
+				panicChan <- fmt.Sprintf("%v\n%s", p, debug.Stack())
 			}
-			close(done)
-			close(panicChan)
 			// 每下载完毕一次，进行一次缓存和 Chrome 的清理
 			err = pkg.ClearRootTmpFolder()
 			if err != nil {
@@ -298,8 +304,10 @@ func (d *Downloader) queueDownloaderLocal() {
 
 		break
 	case p := <-panicChan:
-		// 遇到内部的 panic，向外抛出
-		panic(p)
+		// Mark the job failed instead of re-panicking: a re-panic skipped every status
+		// update, so the job stayed queued and was retried every 15 seconds forever.
+		d.log.Errorln("Downloader job panic:", oneJob.VideoFPath, p)
+		d.downloadQueue.AutoDetectUpdateJobStatus(oneJob, fmt.Errorf("panic while downloading: %v", p))
 	case <-d.ctx.Done():
 		{
 			// 取消这个 context

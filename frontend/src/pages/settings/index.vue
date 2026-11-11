@@ -23,8 +23,7 @@
         <q-tab name="basic" label="基础配置" />
         <q-tab name="advanced" label="进阶配置" />
         <q-tab name="subSource" label="字幕源设置" />
-        <q-tab name="emby" label="Emby配置" />
-        <q-tab name="development" label="开发人员配置" />
+        <q-tab name="emby" label="媒体库设置" />
         <q-tab name="experiment" label="实验室" />
       </q-tabs>
 
@@ -53,10 +52,6 @@
             <emby-settings />
           </q-tab-panel>
 
-          <q-tab-panel name="development">
-            <development-settings />
-          </q-tab-panel>
-
           <q-tab-panel name="experiment">
             <experiment-settings />
           </q-tab-panel>
@@ -75,7 +70,6 @@ import { computed, ref } from 'vue';
 import BasicSettings from 'pages/settings/SettingsPanelBasic';
 import AdvancedSettings from 'pages/settings/SettingsPanelAdvanced';
 import EmbySettings from 'pages/settings/SettingsPanelEmby';
-import DevelopmentSettings from 'pages/settings/SettingsPanelDevelopment';
 import { formModel, submitAll, useSettings } from 'pages/settings/use-settings';
 import { isJobRunning } from 'src/store/systemState';
 import ExperimentSettings from 'pages/settings/SettingsPanelExperiment';

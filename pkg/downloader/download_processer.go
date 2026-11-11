@@ -48,24 +48,7 @@ func (d *Downloader) movieDlFunc(ctx context.Context, job taskQueue2.OneJob, dow
 
 	d.downloadQueue.AutoDetectUpdateJobStatus(job, nil)
 
-	// TODO 刷新字幕，这里是 Emby 的，如果是其他的，需要再对接对应的媒体服务器
-	if settings.Get().EmbySettings.Enable == true && d.embyHelper != nil && job.MediaServerInsideVideoID != "" {
-
-		d.log.Infoln("字幕下载完毕，尝试刷新 Emby 中对应字幕", job.VideoFPath, job.MediaServerInsideVideoID)
-		err = d.embyHelper.EmbyApi.UpdateVideoSubList(settings.Get().EmbySettings, job.MediaServerInsideVideoID)
-		if err != nil {
-			d.log.Errorln("UpdateVideoSubList", job.VideoFPath, job.MediaServerInsideVideoID, "Error:", err)
-			return err
-		}
-	} else {
-		if settings.Get().EmbySettings.Enable == false {
-			d.log.Infoln("字幕下载完毕，尝试刷新 Emby 中对应字幕", job.VideoFPath, "Skip, because Emby enable is false")
-		} else if d.embyHelper == nil {
-			d.log.Infoln("字幕下载完毕，尝试刷新 Emby 中对应字幕", job.VideoFPath, "Skip, because EmbyHelper is nil")
-		} else if job.MediaServerInsideVideoID == "" {
-			d.log.Infoln("字幕下载完毕，尝试刷新 Emby 中对应字幕", job.VideoFPath, "Skip, because MediaServerInsideVideoID is empty")
-		}
-	}
+	d.refreshMediaServer(job)
 
 	return nil
 }
@@ -128,8 +111,6 @@ func (d *Downloader) seriesDlFunc(ctx context.Context, job taskQueue2.OneJob, do
 					panicChan <- p
 				}
 
-				close(done)
-				close(panicChan)
 			}()
 			// 匹配对应的 Eps 去处理
 			done <- d.oneVideoSelectBestSub(episodeInfo.FileFullPath, organizeSubFiles[epsKey])
@@ -178,14 +159,13 @@ func (d *Downloader) seriesDlFunc(ctx context.Context, job taskQueue2.OneJob, do
 				if p := recover(); p != nil {
 					panicChan <- p
 				}
-				close(done)
-				close(panicChan)
 			}()
 			// 匹配对应的 Eps 去处理
 			seasonEpsKey := pkg.GetEpisodeKeyName(episodeInfo.Season, episodeInfo.Episode)
 			if fullSeasonSubDict[seasonEpsKey] == nil || len(fullSeasonSubDict[seasonEpsKey]) < 1 {
 				d.log.Infoln("seriesDlFunc.saveFullSeasonSub, no sub found, Skip", seasonEpsKey)
 				done <- nil
+				return
 			}
 
 			done <- d.oneVideoSelectBestSub(episodeInfo.FileFullPath, fullSeasonSubDict[seasonEpsKey])
@@ -228,20 +208,34 @@ func (d *Downloader) seriesDlFunc(ctx context.Context, job taskQueue2.OneJob, do
 	}
 	// 哪怕有一个写入到本地成功了，也无需对本次任务报错
 	d.downloadQueue.AutoDetectUpdateJobStatus(job, nil)
-	// TODO 刷新字幕，这里是 Emby 的，如果是其他的，需要再对接对应的媒体服务器
-	if settings.Get().EmbySettings.Enable == true && d.embyHelper != nil {
-
-		if job.MediaServerInsideVideoID != "" {
-			d.log.Infoln("字幕下载完毕，尝试刷新 Emby 中对应字幕", job.SeriesRootDirPath, job.MediaServerInsideVideoID, job.Season, job.Episode)
-			err = d.embyHelper.EmbyApi.UpdateVideoSubList(settings.Get().EmbySettings, job.MediaServerInsideVideoID)
-			if err != nil {
-				d.log.Errorln("UpdateVideoSubList", job.SeriesRootDirPath, job.MediaServerInsideVideoID, job.Season, job.Episode, "Error:", err)
-				return err
-			}
-		} else {
-			d.log.Warningln("字幕下载完毕，尝试刷新 Emby 中对应字幕，跳过，因为 MediaServerInsideVideoID 为空", job.SeriesRootDirPath, job.Season, job.Episode)
-		}
-	}
+	d.refreshMediaServer(job)
 
 	return nil
+}
+
+// refreshMediaServer asks Emby/Jellyfin to pick up the subtitle just written. Jobs that
+// came from a media-server scan carry the item ID and refresh that item; jobs from a disk
+// scan or the API have no ID, so the folder holding the video is reported as changed.
+// A failure only logs: the subtitle is already saved and the server will find it on its
+// next library scan anyway.
+func (d *Downloader) refreshMediaServer(job taskQueue2.OneJob) {
+	em := settings.Get().EmbySettings
+	if em == nil || !em.Enable || d.embyHelper == nil {
+		return
+	}
+	name := em.ServerName()
+	if job.MediaServerInsideVideoID != "" {
+		if err := d.embyHelper.EmbyApi.UpdateVideoSubList(em, job.MediaServerInsideVideoID); err != nil {
+			d.log.Errorln("字幕下载完毕，刷新", name, "失败", job.VideoFPath, job.MediaServerInsideVideoID, err)
+			return
+		}
+		d.log.Infoln("字幕下载完毕，已通知", name, "刷新", job.VideoFPath)
+		return
+	}
+	dir := em.ServerPath(filepath.Dir(job.VideoFPath))
+	if err := d.embyHelper.EmbyApi.NotifyPathUpdated(em, dir); err != nil {
+		d.log.Errorln("字幕下载完毕，通知", name, "刷新目录失败", dir, err)
+		return
+	}
+	d.log.Infoln("字幕下载完毕，已通知", name, "刷新目录", dir)
 }

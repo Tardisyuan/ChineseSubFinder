@@ -1,8 +1,11 @@
 package downloader
 
 import (
+	"time"
+
 	"errors"
 	"fmt"
+	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/types/backend"
 	"sync"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/preview_queue"
@@ -24,7 +27,6 @@ import (
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/pre_download_process"
 	subSupplier "github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/sub_supplier"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/sub_timeline_fixer"
-	common2 "github.com/ChineseSubFinder/ChineseSubFinder/pkg/types/common"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/settings"
 	subCommon "github.com/ChineseSubFinder/ChineseSubFinder/pkg/sub_formatter/common"
@@ -44,6 +46,9 @@ type Downloader struct {
 	subFormatter             ifaces.ISubFormatter                             // 字幕格式化命名的实现
 	subNameFormatter         subCommon.FormatterName                          // 从 inSubFormatter 推断出来
 	subTimelineFixerHelperEx *sub_timeline_fixer.SubTimelineFixerHelperEx     // 字幕时间轴校正
+	siteStatusLock           sync.Mutex                                       // separate from downloaderLock, which is held for whole download runs
+	siteStatus               backend.ReplyCheckStatus                         // last supplier check result
+	siteStatusTime           time.Time                                        // when siteStatus was taken
 	downloaderLock           sync.Mutex                                       // 取消执行 task control 的 Lock
 	downloadQueue            *task_queue.TaskQueue                            // 需要下载的视频的队列
 	embyHelper               *embyHelper.EmbyHelper                           // Emby 的实例
@@ -72,14 +77,7 @@ func NewDownloader(inSubFormatter ifaces.ISubFormatter, fileDownloader *file_dow
 	// 这里就不单独弄一个 settings.SubNameFormatter 字段来传递值了，因为 inSubFormatter 就已经知道是什么 formatter 了
 	downloader.subNameFormatter = subCommon.FormatterName(downloader.subFormatter.GetFormatterFormatterName())
 
-	var sitesSequence = make([]string, 0)
-	// TODO 这里写固定了抉择字幕的顺序
-	sitesSequence = append(sitesSequence, common2.SubSiteSubtitleBest)
-	sitesSequence = append(sitesSequence, common2.SubSiteAssrt)
-	sitesSequence = append(sitesSequence, common2.SubSiteA4K)
-	sitesSequence = append(sitesSequence, common2.SubSiteShooter)
-	sitesSequence = append(sitesSequence, common2.SubSiteXunLei)
-	downloader.mk = markSystem.NewMarkingSystem(downloader.log, sitesSequence, settings.Get().AdvancedSettings.SubTypePriority)
+	downloader.mk = markSystem.NewMarkingSystem(downloader.log)
 
 	// 初始化，字幕校正的实例
 	downloader.subTimelineFixerHelperEx = sub_timeline_fixer.NewSubTimelineFixerHelperEx(downloader.log, *settings.Get().TimelineFixerSettings)
@@ -115,6 +113,13 @@ func NewDownloader(inSubFormatter ifaces.ISubFormatter, fileDownloader *file_dow
 	}
 
 	return &downloader
+}
+
+// SiteStatus returns the last supplier check result and when it ran (zero time if none yet).
+func (d *Downloader) SiteStatus() (backend.ReplyCheckStatus, time.Time) {
+	d.siteStatusLock.Lock()
+	defer d.siteStatusLock.Unlock()
+	return d.siteStatus, d.siteStatusTime
 }
 
 // SupplierCheck 检查字幕源是否有效，会影响后续的字幕源是否参与下载
@@ -165,6 +170,10 @@ func (d *Downloader) SupplierCheck() {
 		} else {
 			// 更新 SubSupplierHub 实例
 			d.subSupplierHub = preDownloadProcess.SubSupplierHub
+			d.siteStatusLock.Lock()
+			d.siteStatus = preDownloadProcess.SiteStatus
+			d.siteStatusTime = time.Now()
+			d.siteStatusLock.Unlock()
 			//done <- nil
 		}
 	}
@@ -196,6 +205,21 @@ func (d *Downloader) QueueDownloader() {
 	d.queueDownloaderLocal()
 	// 云端分布式的任务
 	d.queueDownloaderCloud()
+}
+
+// ResetCancel gives the downloader a fresh context after Cancel. CronHelper.Stop cancels it,
+// and without this every job after a restart saw ctx.Done at once: the queue returned
+// and released its lock while the download goroutine kept running, so the next job ran
+// concurrently and its ClearRootTmpFolder wiped this job's extracted subtitles.
+func (d *Downloader) ResetCancel() {
+	if d == nil {
+		return
+	}
+	d.downloaderLock.Lock()
+	defer d.downloaderLock.Unlock()
+	if d.ctx.Err() != nil {
+		d.ctx, d.cancel = context.WithCancel(context.Background())
+	}
 }
 
 func (d *Downloader) Cancel() {

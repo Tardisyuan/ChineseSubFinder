@@ -20,6 +20,7 @@ type AdvancedSettings struct {
 	ScanLogic                  *ScanLogic         `json:"scan_logic"`                     // 扫描的逻辑
 	TaskQueue                  *TaskQueue         `json:"task_queue"`                     // 任务队列的设置
 	DownloadFileCache          *DownloadFileCache `json:"download_file_cache"`            // 下载文件的缓存
+	SubPriority                *SubPriority       `json:"sub_priority"`                   // 字幕挑选的优先级：站点顺序、语言偏好、版本匹配
 }
 
 func NewAdvancedSettings() *AdvancedSettings {
@@ -32,5 +33,6 @@ func NewAdvancedSettings() *AdvancedSettings {
 		ScanLogic:         NewScanLogic(false, false),
 		TaskQueue:         NewTaskQueue(),
 		DownloadFileCache: NewDownloadFileCache(),
+		SubPriority:       NewSubPriority(),
 	}
 }

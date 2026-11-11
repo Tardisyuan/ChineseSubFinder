@@ -1,11 +1,14 @@
 package settings
 
 import (
+	"strings"
+
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/types/common"
 )
 
 type EmbySettings struct {
 	Enable                bool              `json:"enable"`                   // 是否启用
+	ServerType            string            `json:"server_type"`              // emby（默认）或 jellyfin
 	AddressUrl            string            `json:"address_url"`              // 内网服务器的 url
 	APIKey                string            `json:"api_key"`                  // API key
 	MaxRequestVideoNumber int               `json:"max_request_video_number"` // 最大请求获取视频的数量
@@ -24,6 +27,47 @@ func NewEmbySettings() *EmbySettings {
 		Threads:               4,
 		AutoOrManual:          true,
 	}
+}
+
+const (
+	MediaServerEmby     = "emby"
+	MediaServerJellyfin = "jellyfin"
+)
+
+// ServerName is "Jellyfin" or "Emby", for log and UI text.
+func (e *EmbySettings) ServerName() string {
+	if e.IsJellyfin() {
+		return "Jellyfin"
+	}
+	return "Emby"
+}
+
+// ServerPath maps a path as CSF sees it to the path the media server sees, using the
+// longest matching root in the movie/series mappings. An empty mapping value means the
+// media server sees the same path.
+func (e *EmbySettings) ServerPath(physicalPath string) string {
+	bestRoot, bestServer := "", ""
+	for _, m := range []map[string]string{e.MoviePathsMapping, e.SeriesPathsMapping} {
+		for root, server := range m {
+			r := strings.TrimRight(root, "/")
+			if r == "" || server == "" {
+				continue
+			}
+			if (physicalPath == r || strings.HasPrefix(physicalPath, r+"/")) && len(r) > len(bestRoot) {
+				bestRoot, bestServer = r, strings.TrimRight(server, "/")
+			}
+		}
+	}
+	if bestRoot == "" {
+		return physicalPath
+	}
+	return bestServer + strings.TrimPrefix(physicalPath, bestRoot)
+}
+
+// IsJellyfin reports whether the media server is Jellyfin. Empty or unknown means Emby,
+// so configs saved before this field existed keep working.
+func (e *EmbySettings) IsJellyfin() bool {
+	return e.ServerType == MediaServerJellyfin
 }
 
 func (e *EmbySettings) Check() {

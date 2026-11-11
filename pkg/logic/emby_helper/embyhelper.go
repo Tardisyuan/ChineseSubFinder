@@ -764,8 +764,6 @@ func (em *EmbyHelper) getMoreVideoInfoList(embySettings *settings.EmbySettings, 
 				if p := recover(); p != nil {
 					panicChan <- p
 				}
-				close(done)
-				close(panicChan)
 			}()
 
 			info, err := queryFuncByMatchPath(data.Id)

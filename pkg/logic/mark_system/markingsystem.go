@@ -3,93 +3,56 @@ package mark_system
 import (
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/sub_parser/ass"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/sub_parser/srt"
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/sub_helper"
+	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/settings"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/sub_parser_hub"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/types/subparser"
 	"github.com/sirupsen/logrus"
 )
 
-// MarkingSystem 评价系统，解决字幕排序优先级问题
+// MarkingSystem 评价系统，解决字幕排序优先级问题。排序规则见 ranking.go，偏好读取自
+// settings.AdvancedSettings（SubPriority、SubTypePriority），每次挑选时实时读取。
 type MarkingSystem struct {
-	log             *logrus.Logger
-	subSiteSequence []string // 网站的优先级，从高到低
-	SubTypePriority int      // 字幕格式的优先级
-	subParserHub    *sub_parser_hub.SubParserHub
+	log          *logrus.Logger
+	subParserHub *sub_parser_hub.SubParserHub
 }
 
-func NewMarkingSystem(log *logrus.Logger, subSiteSequence []string, subTypePriority int) *MarkingSystem {
-	mk := MarkingSystem{subSiteSequence: subSiteSequence,
-		log:             log,
-		SubTypePriority: subTypePriority,
-		subParserHub:    sub_parser_hub.NewSubParserHub(log, ass.NewParser(log), srt.NewParser(log))}
-	return &mk
+func NewMarkingSystem(log *logrus.Logger) *MarkingSystem {
+	return &MarkingSystem{
+		log:          log,
+		subParserHub: sub_parser_hub.NewSubParserHub(log, ass.NewParser(log), srt.NewParser(log)),
+	}
+}
+
+func currentPrefs() (int, *settings.SubPriority) {
+	adv := settings.Get().AdvancedSettings
+	prio := adv.SubPriority
+	if prio == nil {
+		prio = settings.NewSubPriority()
+	}
+	return adv.SubTypePriority, prio
 }
 
 // SelectOneSubFile 选择最优的一个字幕文件
-func (m MarkingSystem) SelectOneSubFile(organizeSubFiles []string) *subparser.FileInfo {
-	var finalSubFile *subparser.FileInfo
-	subInfoDict := m.parseSubFileInfo(organizeSubFiles)
-	// 优先级别暂定 subSiteSequence: zimuku -> subhd -> xunlei -> shooter
-	// 这里需要循环四轮：
-	// 第一轮，双语、字幕类型自定义，优先
-	// 第二轮，单语言（中文）、字幕类型自定义，优先
-	// 第三轮，双语、字幕类型0，优先
-	// 第四轮，单语言（中文）、字幕类型0，优先
-	for i := 0; i < 4; i++ {
-		for _, subSite := range m.subSiteSequence {
-			infos, ok := subInfoDict[subSite]
-			if ok == false {
-				continue
-			}
-			if i == 0 {
-				finalSubFile = sub_helper.SelectChineseBestBilingualSubtitle(infos, m.SubTypePriority)
-			} else if i == 1 {
-				finalSubFile = sub_helper.SelectChineseBestSubtitle(infos, m.SubTypePriority)
-			} else if i == 2 {
-				finalSubFile = sub_helper.SelectChineseBestBilingualSubtitle(infos, 0)
-			} else if i == 3 {
-				finalSubFile = sub_helper.SelectChineseBestSubtitle(infos, 0)
-			}
-			if finalSubFile != nil {
-				return finalSubFile
-			}
-		}
+func (m MarkingSystem) SelectOneSubFile(videoPath string, organizeSubFiles []string) *subparser.FileInfo {
+	subTypePriority, prio := currentPrefs()
+	all := make([]subparser.FileInfo, 0)
+	for _, infos := range m.parseSubFileInfo(organizeSubFiles) {
+		all = append(all, infos...)
 	}
-	return nil
+	return pickBest(all, videoPath, subTypePriority, prio)
 }
 
 // SelectEachSiteTop1SubFile 每个网站最优的文件
-func (m MarkingSystem) SelectEachSiteTop1SubFile(organizeSubFiles []string) ([]string, []subparser.FileInfo) {
-	// 每个文件都带有出处 [subhd]
-	var finalSubFile *subparser.FileInfo
+func (m MarkingSystem) SelectEachSiteTop1SubFile(videoPath string, organizeSubFiles []string) ([]string, []subparser.FileInfo) {
+	subTypePriority, prio := currentPrefs()
 	var outSiteName = make([]string, 0)
 	var outSubParserFileInfos = make([]subparser.FileInfo, 0)
-	subInfoDict := m.parseSubFileInfo(organizeSubFiles)
-	// 这里需要循环四轮：
-	// 第一轮，双语、字幕类型自定义，优先
-	// 第二轮，单语言（中文）、字幕类型自定义，优先
-	// 第三轮，双语、字幕类型0，优先
-	// 第四轮，单语言（中文）、字幕类型0，优先
-	for siteName, infos := range subInfoDict {
-		// 每个网站保存一个
-		for i := 0; i < 4; i++ {
-			if i == 0 {
-				finalSubFile = sub_helper.SelectChineseBestBilingualSubtitle(infos, m.SubTypePriority)
-			} else if i == 1 {
-				finalSubFile = sub_helper.SelectChineseBestSubtitle(infos, m.SubTypePriority)
-			} else if i == 2 {
-				finalSubFile = sub_helper.SelectChineseBestBilingualSubtitle(infos, 0)
-			} else if i == 3 {
-				finalSubFile = sub_helper.SelectChineseBestSubtitle(infos, 0)
-			}
-			if finalSubFile != nil {
-				outSiteName = append(outSiteName, siteName)
-				outSubParserFileInfos = append(outSubParserFileInfos, *finalSubFile)
-				break
-			}
+	for siteName, infos := range m.parseSubFileInfo(organizeSubFiles) {
+		if best := pickBest(infos, videoPath, subTypePriority, prio); best != nil {
+			outSiteName = append(outSiteName, siteName)
+			outSubParserFileInfos = append(outSubParserFileInfos, *best)
 		}
 	}
-
 	return outSiteName, outSubParserFileInfos
 }
 

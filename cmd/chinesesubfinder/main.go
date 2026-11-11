@@ -78,8 +78,6 @@ func init() {
 	// 初始化设备的信息
 	dao.UpdateInfo(AppVersion, settings.Get())
 
-	// 砍掉，启动就进行扫描的逻辑
-	settings.Get().CommonSettings.RunScanAtStartUp = false
 	err := settings.Get().Save()
 	if err != nil {
 		loggerBase.Panicln("settings.Get().Save() err:", err)

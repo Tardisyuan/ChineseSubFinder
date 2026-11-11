@@ -1,8 +1,6 @@
 package cron_helper
 
 import (
-	"github.com/ChineseSubFinder/ChineseSubFinder/internal/dao"
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/file_downloader"
 	//"github.com/ChineseSubFinder/ChineseSubFinder/internal/logic/pre_job"
 	"sync"
@@ -65,8 +63,8 @@ func NewCronHelper(fileDownloader *file_downloader.FileDownloader) *CronHelper {
 		sub_formatter.GetSubFormatter(ch.Logger, settings.Get().AdvancedSettings.SubNameFormatter),
 		ch.FileDownloader, ch.DownloadQueue)
 
-	// 强制进行一次字幕源有效性检查
-	ch.Downloader.SupplierCheck()
+	// 强制进行一次字幕源有效性检查。放到后台执行：某个字幕源超时会拖住 Web UI 的启动
+	go ch.Downloader.SupplierCheck()
 
 	return &ch
 }
@@ -86,6 +84,8 @@ func (ch *CronHelper) Start(runImmediately bool) {
 	ch.cronHelperRunning = true
 	ch.stopping = false
 	ch.cronLock.Unlock()
+	// Stop() cancelled the downloader's context; jobs need a live one again.
+	ch.Downloader.ResetCancel()
 	// ----------------------------------------------
 	// 判断扫描任务的时间间隔是否符合要求，不符合则重写默认值
 	_, err := cron.ParseStandard(settings.Get().CommonSettings.ScanInterval)
@@ -135,11 +135,6 @@ func (ch *CronHelper) Start(runImmediately bool) {
 	ch.entryIDQueueDownloader, err = ch.c.AddFunc("@every 15s", ch.Downloader.QueueDownloader)
 	if err != nil {
 		ch.Logger.Panicln("CronHelper QueueDownloader, QueueDownloader Cron entryID:", ch.entryIDQueueDownloader, "Error:", err)
-	}
-	// FeedBack
-	ch.entryIDFeedBack, err = ch.c.AddFunc("@every 24h", ch.feedBack)
-	if err != nil {
-		ch.Logger.Panicln("CronHelper QueueDownloader, feedBack Cron entryID:", ch.entryIDFeedBack, "Error:", err)
 	}
 	// 字幕的上传逻辑
 	if settings.Get().ExperimentalFunction.ShareSubSettings.ShareSubEnabled == true {
@@ -243,19 +238,6 @@ func (ch *CronHelper) Stop() {
 	ch.Logger.Infoln("CronHelper.Stop() Done.")
 }
 
-func (ch *CronHelper) feedBack() {
-	ch.Logger.Infoln("Update Info...")
-	nowInfo := dao.UpdateInfo(pkg.AppVersion(), settings.Get())
-	_, err := ch.FileDownloader.MediaInfoDealers.SubtitleBestApi.FeedBack(
-		nowInfo.Id,
-		nowInfo.Version, nowInfo.MediaServer,
-		nowInfo.EnableShare, nowInfo.EnableApiKey)
-	if err != nil {
-		ch.Logger.Errorln("FeedBack Error:", err)
-		return
-	}
-}
-
 //func (ch *CronHelper) scanPlayedVideoSub() {
 //
 //	ch.Logger.Infoln("Update Info...")
@@ -339,3 +321,13 @@ const (
 	Running  = "running"
 	Stopping = "stopping"
 )
+
+// NextScanTime is when the next scheduled library scan runs; zero when the scheduler is stopped.
+func (ch *CronHelper) NextScanTime() time.Time {
+	ch.cronLock.Lock()
+	defer ch.cronLock.Unlock()
+	if !ch.cronHelperRunning || ch.c == nil {
+		return time.Time{}
+	}
+	return ch.c.Entry(ch.entryIDScanVideoProcess).Next
+}

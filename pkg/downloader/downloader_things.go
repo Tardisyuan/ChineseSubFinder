@@ -54,7 +54,7 @@ func (d *Downloader) oneVideoSelectBestSub(oneVideoFullPath string, organizeSubF
 	if settings.Get().AdvancedSettings.SaveMultiSub == false {
 		// 选择最优的一个字幕
 		var finalSubFile *subparser.FileInfo
-		finalSubFile = d.mk.SelectOneSubFile(organizeSubFiles)
+		finalSubFile = d.mk.SelectOneSubFile(oneVideoFullPath, organizeSubFiles)
 		if finalSubFile == nil {
 			outString := fmt.Sprintln("Found", len(organizeSubFiles), " subtitles but not one fit:", oneVideoFullPath)
 			d.log.Warnln(outString)
@@ -77,7 +77,7 @@ func (d *Downloader) oneVideoSelectBestSub(oneVideoFullPath string, organizeSubF
 		}
 	} else {
 		// 每个网站 Top1 的字幕
-		siteNames, finalSubFiles := d.mk.SelectEachSiteTop1SubFile(organizeSubFiles)
+		siteNames, finalSubFiles := d.mk.SelectEachSiteTop1SubFile(oneVideoFullPath, organizeSubFiles)
 		if len(siteNames) < 0 {
 			outString := fmt.Sprintln("SelectEachSiteTop1SubFile found none sub file")
 			d.log.Warnln(outString)

@@ -35,6 +35,21 @@ func (c *CacheCenter) dailyDownloadCountGet(supplierName string, publicIP string
 	return dailyDownloadInfos
 }
 
+// DailyDownloadCountsByDay sums one day's download counts per supplier across all public IPs.
+// whichDay is "2006-01-02".
+func (c *CacheCenter) DailyDownloadCountsByDay(whichDay string) map[string]int {
+	defer c.locker.Unlock()
+	c.locker.Lock()
+
+	var infos []models.DailyDownloadInfo
+	c.db.Where("which_day = ?", whichDay).Find(&infos)
+	out := make(map[string]int)
+	for _, info := range infos {
+		out[info.SupplierName] += info.Count
+	}
+	return out
+}
+
 // DailyDownloadCountAdd 根据字幕提供者的名称，今日下载计数的次数+1，仅仅统计次数，并不确认是哪个视频的字幕下载
 func (c *CacheCenter) DailyDownloadCountAdd(supplierName string, publicIP string, whichDay ...string) (int, error) {
 	defer c.locker.Unlock()

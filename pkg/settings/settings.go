@@ -170,6 +170,10 @@ func (s *Settings) Check() {
 	// 这里需要做一次 Default 的检查，因为有设置会被改写低于预期，至少要在 Default 之上
 	s.AdvancedSettings.TaskQueue.Check()
 	s.AdvancedSettings.DownloadFileCache.Check()
+	if s.AdvancedSettings.SubPriority == nil {
+		s.AdvancedSettings.SubPriority = NewSubPriority()
+	}
+	s.AdvancedSettings.SubPriority.Check()
 
 }
 

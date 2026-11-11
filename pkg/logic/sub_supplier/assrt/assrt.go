@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg"
@@ -182,8 +183,11 @@ func (s *Supplier) getSubListFromFile(videoFPath string, isMovie bool) ([]suppli
 	videoFileName := filepath.Base(videoFPath)
 	for index, subInfo := range searchSubResult.Sub.Subs {
 
+		if subInfo.Id == 0 {
+			subInfo.Id = subInfo.FileId
+		}
 		// 获取具体的下载地址
-		oneSubDetail, err := s.getSubDetail(subInfo.Id)
+		oneSubDetail, err := s.getSubDetail(int(subInfo.Id))
 		if err != nil {
 			s.log.Errorln("getSubDetail", err)
 			continue
@@ -283,7 +287,6 @@ func (s *Supplier) getSubByKeyWord(keyword string) (*SearchSubResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	var errKnow error
 	resp, err := httpClient.R().
 		Get(settings.Get().AdvancedSettings.SuppliersSettings.Assrt.RootUrl +
 			"/sub/search?q=" + tt +
@@ -302,14 +305,21 @@ func (s *Supplier) getSubByKeyWord(keyword string) (*SearchSubResult, error) {
 	*/
 	err = json.Unmarshal([]byte(resp.String()), &searchSubResult)
 	if err != nil {
+		errFirst := err
 		// 再此尝试解析空列表
 		var searchSubResultEmpty SearchSubResultEmpty
 		err = json.Unmarshal([]byte(resp.String()), &searchSubResultEmpty)
 		if err != nil {
-			// 如果还是解析错误，那么就要把现在的错误和上面的错误仪器返回出去
-			s.log.Errorln(s.GetSupplierName(), "NewHttpClient:", keyword, errKnow.Error())
-			s.log.Errorln(s.GetSupplierName(), "json.Unmarshal", err)
-			notify_center.Notify.Add(s.GetSupplierName()+" NewHttpClient", fmt.Sprintf("keyword: %s, resp: %s, error: %s", keyword, resp.String(), errKnow.Error()))
+			// Neither shape parsed (rate limit, quota, HTML error page...). The old code
+			// logged an errKnow that was never set and crashed with a nil pointer here.
+			body := resp.String()
+			if len(body) > 200 {
+				body = body[:200]
+			}
+			err = fmt.Errorf("assrt search %q: HTTP %d, unexpected response %q: %v / %v",
+				keyword, resp.StatusCode(), body, errFirst, err)
+			s.log.Errorln(s.GetSupplierName(), err)
+			notify_center.Notify.Add(s.GetSupplierName()+" search", err.Error())
 			return nil, err
 		}
 		// 赋值过去
@@ -416,14 +426,15 @@ type SearchSubResult struct {
 					Langchs bool `json:"langchs,omitempty"`
 				} `json:"langlist,omitempty"`
 			} `json:"lang,omitempty"`
-			Id          int    `json:"id,omitempty"`
-			VoteScore   int    `json:"vote_score,omitempty"`
-			Videoname   string `json:"videoname,omitempty"`
-			ReleaseSite string `json:"release_site,omitempty"`
-			Revision    int    `json:"revision,omitempty"`
-			Subtype     string `json:"subtype,omitempty"`
-			NativeName  string `json:"native_name,omitempty"`
-			UploadTime  string `json:"upload_time,omitempty"`
+			Id          flexInt `json:"id,omitempty"`
+			FileId      flexInt `json:"fileid,omitempty"` // newer replies; used when id is missing
+			VoteScore   flexInt `json:"vote_score,omitempty"`
+			Videoname   string  `json:"videoname,omitempty"`
+			ReleaseSite string  `json:"release_site,omitempty"`
+			Revision    flexInt `json:"revision,omitempty"`
+			Subtype     string  `json:"subtype,omitempty"`
+			NativeName  string  `json:"native_name,omitempty"`
+			UploadTime  string  `json:"upload_time,omitempty"`
 		} `json:"subs,omitempty"`
 		Result  string `json:"result,omitempty"`
 		Keyword string `json:"keyword,omitempty"`
@@ -435,8 +446,8 @@ type OneSubDetail struct {
 	Sub struct {
 		Action string `json:"action"`
 		Subs   []struct {
-			DownCount int `json:"down_count,omitempty"`
-			ViewCount int `json:"view_count,omitempty"`
+			DownCount flexInt `json:"down_count,omitempty"`
+			ViewCount flexInt `json:"view_count,omitempty"`
 			Lang      struct {
 				Desc     string `json:"desc,omitempty"`
 				Langlist struct {
@@ -446,29 +457,29 @@ type OneSubDetail struct {
 					Langchs bool `json:"langchs,omitempty"`
 				} `json:"langlist,omitempty"`
 			} `json:"lang,omitempty"`
-			Size       int    `json:"size,omitempty"`
-			Title      string `json:"title,omitempty"`
-			Videoname  string `json:"videoname,omitempty"`
-			Revision   int    `json:"revision,omitempty"`
-			NativeName string `json:"native_name,omitempty"`
-			UploadTime string `json:"upload_time,omitempty"`
+			Size       flexInt `json:"size,omitempty"`
+			Title      string  `json:"title,omitempty"`
+			Videoname  string  `json:"videoname,omitempty"`
+			Revision   flexInt `json:"revision,omitempty"`
+			NativeName string  `json:"native_name,omitempty"`
+			UploadTime string  `json:"upload_time,omitempty"`
 			Producer   struct {
 				Producer string `json:"producer,omitempty"`
 				Verifier string `json:"verifier,omitempty"`
 				Uploader string `json:"uploader,omitempty"`
 				Source   string `json:"source,omitempty"`
 			} `json:"producer,omitempty"`
-			Subtype     string `json:"subtype,omitempty"`
-			VoteScore   int    `json:"vote_score,omitempty"`
-			ReleaseSite string `json:"release_site,omitempty"`
+			Subtype     string  `json:"subtype,omitempty"`
+			VoteScore   flexInt `json:"vote_score,omitempty"`
+			ReleaseSite string  `json:"release_site,omitempty"`
 			//Filelist    []struct {
 			//	S   string `json:"s,omitempty"`
 			//	F   string `json:"f,omitempty"`
 			//	Url string `json:"url,omitempty"`
 			//} `json:"filelist,omitempty"`
-			Id       int    `json:"id,omitempty"`
-			Filename string `json:"filename,omitempty"`
-			Url      string `json:"url,omitempty"`
+			Id       flexInt `json:"id,omitempty"`
+			Filename string  `json:"filename,omitempty"`
+			Url      string  `json:"url,omitempty"`
 		} `json:"subs,omitempty"`
 		Result string `json:"result,omitempty"`
 	} `json:"sub,omitempty"`
@@ -482,4 +493,23 @@ type UserInfo struct {
 		Quota  int    `json:"quota,omitempty"`
 	} `json:"user,omitempty"`
 	Status int `json:"status,omitempty"`
+}
+
+// flexInt accepts a JSON number, a numeric string, "" or null. assrt started sending some
+// numeric fields (e.g. "revision") as strings, which made the whole search reply fail to parse.
+type flexInt int
+
+func (f *flexInt) UnmarshalJSON(b []byte) error {
+	str := strings.Trim(string(b), `"`)
+	if str == "" || str == "null" {
+		*f = 0
+		return nil
+	}
+	n, err := strconv.ParseFloat(str, 64)
+	if err != nil {
+		*f = 0 // non-numeric text in a numeric field is not worth failing the whole reply
+		return nil
+	}
+	*f = flexInt(n)
+	return nil
 }

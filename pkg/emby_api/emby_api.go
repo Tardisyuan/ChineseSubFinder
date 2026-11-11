@@ -3,6 +3,8 @@ package emby_api
 import (
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -58,8 +60,6 @@ func (em *EmbyApi) RefreshRecentlyVideoInfo(embySettings *settings.EmbySettings,
 					panicChan <- p
 				}
 
-				close(done)
-				close(panicChan)
 			}()
 
 			done <- updateFunc(data.Id)
@@ -99,9 +99,8 @@ func (em *EmbyApi) GetRecentItemsByUserID(embySettings *settings.EmbySettings, u
 
 	var tmpRecItems emby.EmbyRecentlyItems
 	// 获取指定用户的视频列表
-	_, err := em.createClient().R().
+	_, err := em.newRequest(embySettings).
 		SetQueryParams(map[string]string{
-			"api_key":          embySettings.APIKey,
 			"IsUnaired":        "false",
 			"Limit":            fmt.Sprintf("%d", maxRequestVideoNumber),
 			"Recursive":        "true",
@@ -111,7 +110,7 @@ func (em *EmbyApi) GetRecentItemsByUserID(embySettings *settings.EmbySettings, u
 			"SortBy":           "DateCreated",
 		}).
 		SetResult(&tmpRecItems).
-		Get(embySettings.AddressUrl + "/emby/Users/" + userId + "/Items")
+		Get(em.userItemsUrl(embySettings, userId, ""))
 	if err != nil {
 		return emby.EmbyRecentlyItems{}, err
 	}
@@ -132,9 +131,8 @@ func (em *EmbyApi) GetRecentlyItems(embySettings *settings.EmbySettings, SkipWat
 		em.log.Debugln("Emby Setting SkipWatched = false")
 
 		// 默认是不指定某一个User的视频列表
-		_, err = em.createClient().R().
+		_, err = em.newRequest(embySettings).
 			SetQueryParams(map[string]string{
-				"api_key":          embySettings.APIKey,
 				"IsUnaired":        "false",
 				"Limit":            fmt.Sprintf("%d", maxRequestVideoNumber),
 				"Recursive":        "true",
@@ -144,7 +142,7 @@ func (em *EmbyApi) GetRecentlyItems(embySettings *settings.EmbySettings, SkipWat
 				"SortBy":           "DateCreated",
 			}).
 			SetResult(&recItems).
-			Get(embySettings.AddressUrl + "/emby/Items")
+			Get(em.url(embySettings, "/Items"))
 
 		if err != nil {
 			return emby.EmbyRecentlyItems{}, err
@@ -206,12 +204,29 @@ func (em *EmbyApi) GetRecentlyItems(embySettings *settings.EmbySettings, SkipWat
 func (em *EmbyApi) GetUserIdList(embySettings *settings.EmbySettings) (emby.EmbyUsers, error) {
 	var recItems emby.EmbyUsers
 
-	_, err := em.createClient().R().
-		SetQueryParams(map[string]string{
-			"api_key": embySettings.APIKey,
-		}).
+	if embySettings.IsJellyfin() {
+		// Jellyfin has no /Users/Query; GET /Users returns a bare array.
+		var users []struct {
+			Name string `json:"Name"`
+			Id   string `json:"Id"`
+		}
+		_, err := em.newRequest(embySettings).SetResult(&users).Get(em.url(embySettings, "/Users"))
+		if err != nil {
+			return emby.EmbyUsers{}, err
+		}
+		for _, u := range users {
+			recItems.Items = append(recItems.Items, struct {
+				Name string `json:"Name"`
+				Id   string `json:"Id"`
+			}{Name: u.Name, Id: u.Id})
+		}
+		recItems.TotalRecordCount = len(recItems.Items)
+		return recItems, nil
+	}
+
+	_, err := em.newRequest(embySettings).
 		SetResult(&recItems).
-		Get(embySettings.AddressUrl + "/emby/Users/Query")
+		Get(em.url(embySettings, "/Users/Query"))
 
 	if err != nil {
 		return emby.EmbyUsers{}, err
@@ -224,12 +239,9 @@ func (em *EmbyApi) GetItemAncestors(embySettings *settings.EmbySettings, id stri
 
 	var recItems []emby.EmbyItemsAncestors
 
-	_, err := em.createClient().R().
-		SetQueryParams(map[string]string{
-			"api_key": embySettings.APIKey,
-		}).
+	_, err := em.newRequest(embySettings).
 		SetResult(&recItems).
-		Get(embySettings.AddressUrl + "/emby/Items/" + id + "/Ancestors")
+		Get(em.url(embySettings, "/Items/") + id + "/Ancestors")
 	if err != nil {
 		return nil, err
 	}
@@ -243,12 +255,14 @@ func (em *EmbyApi) GetItemVideoInfo(embySettings *settings.EmbySettings, id stri
 
 	var recItem emby.EmbyVideoInfo
 
-	_, err := em.createClient().R().
-		SetQueryParams(map[string]string{
-			"api_key": embySettings.APIKey,
-		}).
+	// Emby answers item lookups on /LiveTv/Programs/{id}; Jellyfin uses /Items/{id}.
+	itemPath := "/LiveTv/Programs/"
+	if embySettings.IsJellyfin() {
+		itemPath = "/Items/"
+	}
+	_, err := em.newRequest(embySettings).
 		SetResult(&recItem).
-		Get(embySettings.AddressUrl + "/emby/LiveTv/Programs/" + id)
+		Get(em.url(embySettings, itemPath) + id)
 	if err != nil {
 		return emby.EmbyVideoInfo{}, err
 	}
@@ -261,12 +275,9 @@ func (em *EmbyApi) GetItemVideoInfoByUserId(embySettings *settings.EmbySettings,
 
 	var recItem emby.EmbyVideoInfoByUserId
 
-	_, err := em.createClient().R().
-		SetQueryParams(map[string]string{
-			"api_key": embySettings.APIKey,
-		}).
+	_, err := em.newRequest(embySettings).
 		SetResult(&recItem).
-		Get(embySettings.AddressUrl + "/emby/Users/" + userId + "/Items/" + videoId)
+		Get(em.userItemsUrl(embySettings, userId, videoId))
 	if err != nil {
 		return emby.EmbyVideoInfoByUserId{}, err
 	}
@@ -277,12 +288,11 @@ func (em *EmbyApi) GetItemVideoInfoByUserId(embySettings *settings.EmbySettings,
 // UpdateVideoSubList 更新字幕列表， 在 API 调试界面 -- ItemRefreshService
 func (em *EmbyApi) UpdateVideoSubList(embySettings *settings.EmbySettings, id string) error {
 
-	_, err := em.createClient().R().
+	_, err := em.newRequest(embySettings).
 		SetQueryParams(map[string]string{
 			"Recursive": "true",
-			"api_key":   embySettings.APIKey,
 		}).
-		Post(embySettings.AddressUrl + "/emby/Items/" + id + "/Refresh")
+		Post(em.url(embySettings, "/Items/") + id + "/Refresh")
 	if err != nil {
 		return err
 	}
@@ -290,16 +300,72 @@ func (em *EmbyApi) UpdateVideoSubList(embySettings *settings.EmbySettings, id st
 	return nil
 }
 
+// NotifyPathUpdated tells Emby/Jellyfin that something under path changed, so it rescans
+// just that folder and picks up new subtitles. Works without the media server's item ID.
+// path must be the path as the media server sees it.
+func (em *EmbyApi) NotifyPathUpdated(embySettings *settings.EmbySettings, path string) error {
+	body := map[string]interface{}{
+		"Updates": []map[string]string{{"Path": path, "UpdateType": "Modified"}},
+	}
+	resp, err := em.newRequest(embySettings).
+		SetHeader("Content-Type", "application/json").
+		SetBody(body).
+		Post(em.url(embySettings, "/Library/Media/Updated"))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode() >= 300 {
+		return fmt.Errorf("%s /Library/Media/Updated: HTTP %d %s", embySettings.ServerName(), resp.StatusCode(), resp.String())
+	}
+	return nil
+}
+
 // GetSubFileData 下载字幕 subExt -> .ass or .srt , 在 API 调试界面 -- SubtitleService
 func (em *EmbyApi) GetSubFileData(embySettings *settings.EmbySettings, videoId, mediaSourceId, subIndex, subExt string) (string, error) {
 
-	response, err := em.createClient().R().
-		Get(embySettings.AddressUrl + "/emby/Videos/" + videoId + "/" + mediaSourceId + "/Subtitles/" + subIndex + "/Stream" + subExt)
+	response, err := em.newRequest(embySettings).
+		Get(em.url(embySettings, "/Videos/") + videoId + "/" + mediaSourceId + "/Subtitles/" + subIndex + "/Stream" + subExt)
 	if err != nil {
 		return "", err
 	}
 
 	return response.String(), nil
+}
+
+// url builds an API URL. Emby serves its API under /emby; Jellyfin serves it at the root.
+func (em *EmbyApi) url(embySettings *settings.EmbySettings, path string) string {
+	base := strings.TrimRight(embySettings.AddressUrl, "/")
+	if embySettings.IsJellyfin() {
+		return base + path
+	}
+	return base + "/emby" + path
+}
+
+// userItemsUrl is a user's item list (itemId == "") or one item as seen by that user.
+// Jellyfin 10.9+ moved these from /Users/{userId}/Items to /Items?userId=.
+func (em *EmbyApi) userItemsUrl(embySettings *settings.EmbySettings, userId, itemId string) string {
+	if embySettings.IsJellyfin() {
+		path := "/Items"
+		if itemId != "" {
+			path += "/" + itemId
+		}
+		return em.url(embySettings, path) + "?userId=" + url.QueryEscape(userId)
+	}
+	path := "/Users/" + userId + "/Items"
+	if itemId != "" {
+		path += "/" + itemId
+	}
+	return em.url(embySettings, path)
+}
+
+// newRequest attaches the API key. Jellyfin 10.11 disables the legacy api_key query
+// parameter by default, so it gets the Authorization header instead.
+func (em *EmbyApi) newRequest(embySettings *settings.EmbySettings) *resty.Request {
+	r := em.createClient().R()
+	if embySettings.IsJellyfin() {
+		return r.SetHeader("Authorization", `MediaBrowser Token="`+embySettings.APIKey+`"`)
+	}
+	return r.SetQueryParam("api_key", embySettings.APIKey)
 }
 
 func (em *EmbyApi) createClient() *resty.Client {

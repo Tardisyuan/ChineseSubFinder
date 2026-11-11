@@ -12,5 +12,7 @@ class JobApi extends BaseApi {
   update = (id, data) => this.http(`/v1/jobs/change-job-status`, { id, ...data }, 'POST');
 
   getLog = (id) => this.http(`/v1/jobs/log`, { id }, 'POST');
+
+  getOverview = () => this.http('/v1/overview');
 }
 export default new JobApi();

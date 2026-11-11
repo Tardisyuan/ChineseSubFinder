@@ -133,8 +133,6 @@ func (tc *TaskControl) baseFuncHandler(inData interface{}) {
 			if p := recover(); p != nil {
 				panicChan <- p
 			}
-			close(done)
-			close(panicChan)
 		}()
 
 		done <- tc.ctxFunc(ctx, inData)

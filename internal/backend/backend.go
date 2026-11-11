@@ -202,8 +202,8 @@ func (b *BackEnd) doCornJob() {
 		// 是否完成了 Setup，如果完成了，那么就开启第一次的扫描
 		go func() {
 			b.logger.Infoln("Setup is Done")
-			// settings.Get().CommonSettings.RunScanAtStartUp 取消开启就扫描的逻辑
-			b.cronHelper.Start(false)
+			// 尊重 RunScanAtStartUp 配置：开启时启动后立即扫描一次
+			b.cronHelper.Start(settings.Get().CommonSettings.RunScanAtStartUp)
 		}()
 	}
 }

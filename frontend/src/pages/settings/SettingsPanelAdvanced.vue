@@ -100,6 +100,74 @@
         </q-item-section>
       </q-item>
 
+      <template v-if="form.sub_priority">
+        <q-separator spaced inset></q-separator>
+
+        <q-item>
+          <q-item-section>
+            <q-item-label>字幕挑选优先级</q-item-label>
+            <q-item-label caption>
+              多个字幕可选时按这个顺序比较：先看版本是否匹配，再看语言偏好，然后是字幕格式，最后是站点顺序。
+            </q-item-label>
+          </q-item-section>
+        </q-item>
+
+        <q-item tag="label" v-ripple>
+          <q-item-section>
+            <q-item-label>优先匹配视频版本</q-item-label>
+            <q-item-label caption>
+              字幕文件名和视频文件名的发布组、片源（如 DSNP、WEB-DL）、分辨率越一致越优先，时间轴更不容易错位。
+              视频文件名里没有这些信息时不起作用。
+            </q-item-label>
+          </q-item-section>
+          <q-item-section avatar>
+            <q-toggle v-model="form.sub_priority.match_release" />
+          </q-item-section>
+        </q-item>
+
+        <q-item>
+          <q-item-section>
+            <q-item-label>语言偏好</q-item-label>
+          </q-item-section>
+          <q-item-section avatar>
+            <div class="row">
+              <q-radio v-model="form.sub_priority.language" val="bilingual" label="双语优先" />
+              <q-radio v-model="form.sub_priority.language" val="chs" label="简体优先" />
+              <q-radio v-model="form.sub_priority.language" val="cht" label="繁体优先" />
+            </div>
+          </q-item-section>
+        </q-item>
+
+        <q-item>
+          <q-item-section top>
+            <q-item-label>站点顺序</q-item-label>
+            <q-item-label caption>越靠上越优先</q-item-label>
+          </q-item-section>
+          <q-item-section avatar>
+            <q-list dense bordered separator style="min-width: 220px">
+              <q-item v-for="(site, i) in form.sub_priority.site_order" :key="site">
+                <q-item-section avatar class="text-grey">{{ i + 1 }}</q-item-section>
+                <q-item-section>{{ site }}</q-item-section>
+                <q-item-section side>
+                  <div class="row no-wrap">
+                    <q-btn flat dense round size="sm" icon="arrow_upward" :disable="i === 0" @click="moveSite(i, -1)" />
+                    <q-btn
+                      flat
+                      dense
+                      round
+                      size="sm"
+                      icon="arrow_downward"
+                      :disable="i === form.sub_priority.site_order.length - 1"
+                      @click="moveSite(i, 1)"
+                    />
+                  </div>
+                </q-item-section>
+              </q-item>
+            </q-list>
+          </q-item-section>
+        </q-item>
+      </template>
+
       <q-separator spaced inset></q-separator>
 
       <q-item>
@@ -155,7 +223,7 @@
       <q-item>
         <q-item-section>
           <q-item-label class="q-mb-sm"> 字幕源设置</q-item-label>
-          <q-item v-for="item in form.suppliers_settings" :key="item" clickable>
+          <q-item v-for="item in activeSuppliers" :key="item.name" clickable>
             <q-item-section avatar class="text-bold" style="width: 120px">
               {{ item.name }}
             </q-item-section>
@@ -384,6 +452,7 @@ import {
 } from 'src/constants/SettingConstants';
 import { formModel } from 'pages/settings/use-settings';
 import { toRefs } from '@vueuse/core';
+import { computed } from 'vue';
 import ProxyCheckBtn from 'components/ProxyCheckBtn';
 import EditSubSourceBtnDialog from 'pages/settings/BtnDialogEditSubSource';
 import BtnCheckTmdbApi from 'pages/settings/BtnCheckTmdbApi';
@@ -395,6 +464,18 @@ const subNameFormatDescMap = {
 };
 
 const { advanced_settings: form } = toRefs(formModel);
+
+const moveSite = (i, delta) => {
+  const order = form.value.sub_priority.site_order;
+  const j = i + delta;
+  [order[i], order[j]] = [order[j], order[i]];
+};
+
+// Sites that are gone or no longer wired in; their settings stay in the config but are not shown.
+const DEAD_SUPPLIERS = ['a4k', 'zimuku', 'subtitle_best', 'csf', 'subhd'];
+const activeSuppliers = computed(() =>
+  Object.values(form.value.suppliers_settings ?? {}).filter((s) => !DEAD_SUPPLIERS.includes(s.name))
+);
 
 const handleSubSourceUpdate = (item, data) => {
   formModel.advanced_settings.suppliers_settings[item.name].root_url = data.url;

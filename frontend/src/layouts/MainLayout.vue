@@ -5,17 +5,9 @@
         <q-btn flat dense round color="white" icon="menu" aria-label="Menu" @click="leftDrawerOpen = !leftDrawerOpen" />
         <div class="text-h6 q-ml-sm">{{ $route.meta.title }}</div>
         <q-space />
-        <version-update-item>
-          <q-item clickable>
-            <q-item-section class="relative-position q-px-sm">
-              版本升级
-              <div class="absolute-top-right bg-red" style="border-radius: 50%; width: 8px; height: 8px"></div>
-            </q-item-section>
-          </q-item>
-        </version-update-item>
         <q-item
           clickable
-          @click="openPage('https://github.com/ChineseSubFinder/ChineseSubFinder/blob/master/docker/readme.md')"
+          @click="openPage('https://github.com/Tardisyuan/ChineseSubFinder/blob/master/docker/readme.md')"
         >
           <q-item-section> 帮助文档 </q-item-section>
         </q-item>
@@ -45,9 +37,18 @@
         <div class="text-center">
           <img src="icons/logo.png" alt="" style="filter: invert(100%); height: 60px" />
         </div>
-        <div class="q-mt-sm text-center relative-position">
-          <q-badge align="top">{{ systemState.systemInfo?.version }}</q-badge>
-          ChineseSubFinder
+        <div class="q-mt-sm text-center">ChineseSubFinder</div>
+        <div v-if="buildInfo" class="text-center text-caption text-grey-5" :title="systemState.systemInfo?.version">
+          <a
+            v-if="buildInfo.commit"
+            class="text-grey-5"
+            style="text-decoration: none"
+            :href="buildInfo.commitUrl"
+            target="_blank"
+          >
+            私有版 {{ buildInfo.date }} · {{ buildInfo.commit }}
+          </a>
+          <span v-else>{{ buildInfo.raw }}</span>
         </div>
       </div>
       <q-list>
@@ -65,7 +66,7 @@
 
 <script setup>
 import routes from 'src/router/routes';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import MenuItem from 'layouts/MenuItem';
 import { systemState } from 'src/store/systemState';
@@ -73,12 +74,24 @@ import { userState } from 'src/store/userState';
 import { LocalStorage } from 'quasar';
 import AccessApi from 'src/api/AccessApi';
 import BugReportItem from 'layouts/BugReportItem';
-import VersionUpdateItem from 'components/VersionUpdateItem';
 import NoticeDialog from 'components/NoticeDialog';
 
 const router = useRouter();
 
 const leftDrawerOpen = ref(false);
+
+// Version comes in as "<yyyymmdd>-<sha> Lite" from the CI build (see .github/workflows/docker.yml).
+const buildInfo = computed(() => {
+  const raw = systemState.systemInfo?.version?.replace(/\s+lite$/i, '');
+  if (!raw) return null;
+  const m = raw.match(/^(\d{4})(\d{2})(\d{2})-([0-9a-f]{7,})$/);
+  if (!m) return { raw };
+  return {
+    date: `${m[1]}-${m[2]}-${m[3]}`,
+    commit: m[4],
+    commitUrl: `https://github.com/Tardisyuan/ChineseSubFinder/commit/${m[4]}`,
+  };
+});
 const menus = routes.find((e) => e.path === '/').children;
 
 const logout = () => {

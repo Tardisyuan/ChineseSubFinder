@@ -24,6 +24,7 @@ func (cb *ControllerBase) CheckEmbySettingsHandler(c *gin.Context) {
 
 	emSettings := settings.EmbySettings{
 		Enable:                true,
+		ServerType:            checkEmbyApi.ServerType,
 		AddressUrl:            checkEmbyApi.AddressUrl,
 		APIKey:                checkEmbyApi.APIKey,
 		MaxRequestVideoNumber: 2000,
@@ -38,7 +39,7 @@ func (cb *ControllerBase) CheckEmbySettingsHandler(c *gin.Context) {
 		return
 	}
 	if len(userList.Items) <= 0 {
-		c.JSON(http.StatusOK, backend2.ReplyCommon{Message: "your emby api key can't get info from emby server"})
+		c.JSON(http.StatusOK, backend2.ReplyCommon{Message: "无法从媒体服务器获取用户列表，请检查地址、服务器类型和 API Key"})
 	} else {
 		c.JSON(http.StatusOK, backend2.ReplyCommon{Message: "ok"})
 	}

@@ -11,4 +11,5 @@ type ReqCheckEmbyPath struct {
 type ReqCheckEmbyAPI struct {
 	AddressUrl string `json:"address_url" binding:"required"`
 	APIKey     string `json:"api_key" binding:"required"`
+	ServerType string `json:"server_type"`
 }

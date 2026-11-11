@@ -184,7 +184,8 @@ func (cb *ControllerBase) PreviewSearchOtherWeb(c *gin.Context) {
 	searchOtherWebReply.SearchUrls = make([]string, 0)
 	searchOtherWebReply.SearchUrls = append(searchOtherWebReply.SearchUrls, settings.Get().AdvancedSettings.SuppliersSettings.Zimuku.GetSearchUrl())
 	searchOtherWebReply.SearchUrls = append(searchOtherWebReply.SearchUrls, settings.Get().AdvancedSettings.SuppliersSettings.SubHD.GetSearchUrl())
-	searchOtherWebReply.SearchUrls = append(searchOtherWebReply.SearchUrls, settings.Get().AdvancedSettings.SuppliersSettings.A4k.GetSearchUrl())
+	// a4k.net is gone; assrt's own site search replaces it
+	searchOtherWebReply.SearchUrls = append(searchOtherWebReply.SearchUrls, "https://assrt.net/sub/?searchword=%s")
 
 	year, err := now.Parse(mixMediaInfo.Year)
 	if err != nil {
