@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
+	"testing"
 	"time"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/get_access_time"
@@ -344,7 +346,21 @@ func ClearFolder(folderFullPath string) error {
 }
 
 // GetConfigRootDirFPath 获取 Config 的根目录，不同系统不一样
+// testConfigRoot keeps "go test" runs out of the real config folder (/config on Linux,
+// ~/.config/chinesesubfinder on macOS); CI runners have no writable /config.
+var testConfigRoot = sync.OnceValue(func() string {
+	dir, err := os.MkdirTemp("", "csf-test-config-")
+	if err != nil {
+		panic("GetConfigRootDirFPath create test config dir, Error:" + err.Error())
+	}
+	return dir
+})
+
 func GetConfigRootDirFPath() string {
+
+	if testing.Testing() && LinuxConfigPathInSelfPath() == "" {
+		return testConfigRoot()
+	}
 
 	nowConfigFPath := ""
 	sysType := runtime.GOOS
