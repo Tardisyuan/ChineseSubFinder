@@ -10,6 +10,7 @@ import (
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/settings"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg"
+	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/strcut_json"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/types/supplier"
 
@@ -40,7 +41,8 @@ func (c *CacheCenter) DownloadFileAdd(subInfo *supplier.SubInfo) error {
 	// 保存到本地文件
 	todayString := time.Now().Format("2006-01-02")
 	saveFPath := filepath.Join(c.downloadFileSaveRootPath, todayString, subInfo.GetUID())
-	err = pkg.WriteFile(saveFPath, b)
+	// atomic: a truncated cache file would fail to parse on every later hit until its TTL
+	err = strcut_json.WriteFileAtomic(saveFPath, b, false)
 	if err != nil {
 		return err
 	}

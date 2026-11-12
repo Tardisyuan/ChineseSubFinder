@@ -29,6 +29,16 @@ func GetDb() *gorm.DB {
 	return db
 }
 
+// CloseDb closes the sqlite file; called once on shutdown.
+func CloseDb() {
+	if db == nil {
+		return
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		_ = sqlDB.Close()
+	}
+}
+
 // DeleteDbFile 删除 Db 文件
 func DeleteDbFile() error {
 

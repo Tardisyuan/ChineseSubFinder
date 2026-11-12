@@ -39,6 +39,12 @@ const routes = [
         meta: { title: '下载队列', icon: 'assignment' },
       },
       {
+        name: 'history',
+        path: 'history',
+        component: () => import('pages/history/index.vue'),
+        meta: { title: '下载历史', icon: 'history' },
+      },
+      {
         name: 'settings',
         path: 'settings',
         component: () => import('pages/settings/index.vue'),

@@ -251,7 +251,7 @@ func (d *SubSupplierHub) dlSubFromSeriesInfo(seriesDirPath string, index int64, 
 		d.log.Warningln("DownloadSubtitleInAllSiteByOneSeries.subInfos == 0, No Sub Downloaded.")
 	}
 
-	organizeSubFiles, err := sub_helper.OrganizeDlSubFiles(d.log, filepath.Base(seriesDirPath), subInfos, false)
+	organizeSubFiles, err := sub_helper.OrganizeDlSubFiles(d.log, filepath.Base(seriesDirPath), subInfos, false, absoluteEpisodes(seriesInfo))
 	if err != nil {
 		return nil, errors.Newf("OrganizeDlSubFiles %v %v", seriesDirPath, err)
 	}

@@ -39,7 +39,7 @@ func (n *NotifyCenter) Send() {
 	defer transport.CloseIdleConnections()
 	client := resty.New().SetTransport(transport)
 	for s, s2 := range n.infos {
-		_, err := client.R().Get(n.webhookUrl + s + "/" + url.QueryEscape(s2))
+		_, err := client.R().Get(n.webhookUrl + s + "/" + url.PathEscape(s2))
 		if err != nil {
 			n.log.Errorln("NewNotifyCenter.Send", err)
 			return

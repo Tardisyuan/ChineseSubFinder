@@ -135,44 +135,46 @@ func (b *BackEnd) start() {
 	}()
 }
 
-func (b *BackEnd) Restart() {
+// Stop shuts the http server down (waits up to 5 seconds for requests in flight). Used by
+// Restart and by the SIGTERM handler in main.
+func (b *BackEnd) Stop() {
 
-	stopFunc := func() {
-
-		b.locker.Lock()
-		defer func() {
-			b.locker.Unlock()
-		}()
-		if b.running == false {
-			b.logger.Debugln("Http Server is not running")
-			return
-		}
-		b.running = false
-
-		exitOk := make(chan interface{}, 1)
-		defer close(exitOk)
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		go func() {
-			if err := b.srv.Shutdown(ctx); err != nil {
-				b.logger.Errorln("Http Server Shutdown:", err)
-			}
-			exitOk <- true
-		}()
-		select {
-		case <-ctx.Done():
-			b.logger.Warningln("Http Server Shutdown timeout of 5 seconds.")
-		case <-exitOk:
-			b.logger.Infoln("Http Server Shutdown Successfully")
-		}
-		b.logger.Infoln("Http Server Shutdown Done.")
+	b.locker.Lock()
+	defer func() {
+		b.locker.Unlock()
+	}()
+	if b.running == false {
+		b.logger.Debugln("Http Server is not running")
+		return
 	}
+	b.running = false
+
+	// buffered and never closed: after a timeout the goroutine below still sends once
+	exitOk := make(chan interface{}, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	go func() {
+		if err := b.srv.Shutdown(ctx); err != nil {
+			b.logger.Errorln("Http Server Shutdown:", err)
+		}
+		exitOk <- true
+	}()
+	select {
+	case <-ctx.Done():
+		b.logger.Warningln("Http Server Shutdown timeout of 5 seconds.")
+	case <-exitOk:
+		b.logger.Infoln("Http Server Shutdown Successfully")
+	}
+	b.logger.Infoln("Http Server Shutdown Done.")
+}
+
+func (b *BackEnd) Restart() {
 
 	for {
 		select {
 		case <-b.restartSignal:
 			{
-				stopFunc()
+				b.Stop()
 				b.start()
 			}
 		}

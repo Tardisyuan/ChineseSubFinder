@@ -39,4 +39,10 @@ RUN chmod +x /usr/bin/entrypoint.sh
 VOLUME ["/config", "/media"]
 WORKDIR /config
 EXPOSE 19035
+# /system-status needs no login. The port can be changed with a /config/CustomPort file.
+# -Y off: do not send the check through an http_proxy set on the container.
+# With PERMS=true the app only starts after the ownership pass over /media, so a first
+# start on a large library can show "unhealthy" for a while; nothing acts on that.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD wget -q -Y off -O /dev/null "http://127.0.0.1:$(cat /config/CustomPort 2>/dev/null || echo 19035)/system-status" || exit 1
 ENTRYPOINT ["tini", "entrypoint.sh"]

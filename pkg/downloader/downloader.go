@@ -61,7 +61,6 @@ type Downloader struct {
 	movieInfoMap  map[string]MovieInfo  // 给 Web 界面使用的，Key: VideoFPath
 	seasonInfoMap map[string]SeasonInfo // 给 Web 界面使用的,Key: RootDirPath
 
-	needSkipCloudTask bool // 是否跳过云端任务，比如当前的 App 版本低于服务器的要求（过低可能爬虫已经失效，意义不大）
 }
 
 func NewDownloader(inSubFormatter ifaces.ISubFormatter, fileDownloader *file_downloader.FileDownloader, downloadQueue *task_queue.TaskQueue) *Downloader {
@@ -201,10 +200,7 @@ func (d *Downloader) SupplierCheck() {
 // QueueDownloader 从字幕队列中取一个视频的字幕下载任务出来，并且开始下载
 func (d *Downloader) QueueDownloader() {
 
-	// 本地的任务
 	d.queueDownloaderLocal()
-	// 云端分布式的任务
-	d.queueDownloaderCloud()
 }
 
 // ResetCancel gives the downloader a fresh context after Cancel. CronHelper.Stop cancels it,

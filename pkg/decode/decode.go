@@ -405,9 +405,24 @@ func GetSeriesDirRootFPath(oneEpFPath string) string {
 	oneSeriesDirFPath := filepath.Dir(oneSeasonDirFPath)
 	if IsFile(filepath.Join(oneSeriesDirFPath, MetadateTVNfo)) == true {
 		return oneSeriesDirFPath
-	} else {
-		return ""
 	}
+	// flat layout (common for anime): episodes sit next to tvshow.nfo, no season folder
+	if IsFile(filepath.Join(oneSeasonDirFPath, MetadateTVNfo)) == true {
+		return oneSeasonDirFPath
+	}
+	return ""
+}
+
+// AbsoluteEpisodeInName returns the episode number written in a video file name when the
+// name is episode-only ("[Group] Title - 15 [1080p].mkv") and differs from the episode the
+// nfo gives (S02E03): the release counts episodes across seasons, and subtitles made for it
+// are numbered the same way. 0 when the name has no such number.
+func AbsoluteEpisodeInName(videoFileName string, nfoEpisode int) int {
+	_, season, episode, err := GetSeasonAndEpisodeFromSubFileName(videoFileName)
+	if err != nil || season != 0 || episode <= 0 || episode == nfoEpisode {
+		return 0
+	}
+	return episode
 }
 
 // GetVideoInfoFromFileName 从文件名推断文件信息，这个应该是次要方案，优先还是从 nfo 文件获取这些信息
@@ -498,7 +513,14 @@ var (
 	regEpOnly      = regexp.MustCompile(`(?:^|[^A-Z0-9])EP?(\d{1,3})(?:[^0-9]|$)`)
 	regDashEpisode = regexp.MustCompile(`\s-\s(\d{2,3})(?:[^0-9P]|$)`)
 	regSeasonOnly  = regexp.MustCompile(`(?:^|[^A-Z0-9])S(\d{1,2})(?:[^0-9]|$)`)
+	// fansub styles: "[Group][Title][05][1080p]", "【05】", "[05v2]", "[12 END]"
+	regBracketEpisode = regexp.MustCompile(`[\[【](\d{2,3})(?:V\d)?(?:\s?END)?[\]】]`)
+	// a bare number as the whole name: "05.chs.ass"
+	regBareEpisode = regexp.MustCompile(`^(\d{1,3})(?:V\d)?(?:\.|$)`)
 )
+
+// numbers that show up in brackets but are video parameters, not episodes
+var notEpisode = map[string]bool{"480": true, "720": true, "264": true, "265": true}
 
 // episodeOnly finds an episode number in names without an SxxEyy tag. name is the original
 // file name (for the Chinese patterns), upper its upper-cased form.
@@ -511,7 +533,11 @@ func episodeOnly(name, upper string) (episode, season int, ok bool) {
 	var m []string
 	if m = regCnEpisode.FindStringSubmatch(name); m == nil {
 		if m = regEpOnly.FindStringSubmatch(upper); m == nil {
-			m = regDashEpisode.FindStringSubmatch(upper)
+			if m = regDashEpisode.FindStringSubmatch(upper); m == nil {
+				if m = regBracketEpisode.FindStringSubmatch(upper); m == nil || notEpisode[m[1]] {
+					m = regBareEpisode.FindStringSubmatch(upper)
+				}
+			}
 		}
 	}
 	if m == nil {

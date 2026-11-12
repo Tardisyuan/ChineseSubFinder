@@ -45,7 +45,7 @@
             class="btn-download"
             color="primary"
             icon="lock"
-            title="锁定选中视频，不进行字幕下载"
+            title="锁定选中视频：字幕已满意，不再自动下载或更换"
             flat
             :disable="selection.length === 0"
             @click="skipAll(true)"
@@ -253,7 +253,7 @@ const downloadSubtitle = async (items) => {
   }).onOk(async (val) => {
     // 下载全部Promises
     const promises = downloadList.map(async (item) => {
-      const [, err] = await LibraryApi.downloadSubtitle({
+      const [res, err] = await LibraryApi.downloadSubtitle({
         video_type: VIDEO_TYPE_TV,
         physical_video_file_full_path: item.video_f_path,
         task_priority_level: val, // 一般的队列等级是5，如果想要快，那么可以先默认这里填写3，这样就可以插队
@@ -263,17 +263,24 @@ const downloadSubtitle = async (items) => {
       if (err !== null) {
         return Promise.reject(err);
       }
-      return Promise.resolve();
+      return Promise.resolve(res.message);
     });
 
     const result = await Promise.allSettled(promises);
 
-    const successCount = result.filter((item) => item.status === 'fulfilled').length;
+    const lockedCount = result.filter((item) => item.value === 'video is locked').length;
+    const successCount = result.filter((item) => item.status === 'fulfilled').length - lockedCount;
     const errorCount = result.filter((item) => item.status === 'rejected').length;
 
-    const msg = `成功添加 ${successCount} 个任务到下载队列${errorCount ? `，失败 ${errorCount} 个` : ''}`;
+    const msg = `成功添加 ${successCount} 个任务到下载队列${errorCount ? `，失败 ${errorCount} 个` : ''}${
+      lockedCount ? `，${lockedCount} 个已锁定（字幕已满意）被跳过，需先解锁` : ''
+    }`;
 
-    SystemMessage.success(msg);
+    if (lockedCount || errorCount) {
+      SystemMessage.warn(msg, { timeout: 3000 });
+    } else {
+      SystemMessage.success(msg);
+    }
   });
 };
 

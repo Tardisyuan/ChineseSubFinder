@@ -83,6 +83,7 @@ import LibraryApi from 'src/api/LibraryApi';
 import { SystemMessage } from 'src/utils/message';
 import { VIDEO_TYPE_MOVIE } from 'src/constants/SettingConstants';
 import { useQuasar } from 'quasar';
+import useEventBus from 'src/composables/use-event-bus';
 import { doFixSubtitleTimeline, getUrl, subtitleUploadList } from 'pages/library/use-library';
 import BtnIgnoreVideo from 'pages/library/BtnIgnoreVideo';
 import PosterImage from 'pages/library/PosterImage';
@@ -135,7 +136,7 @@ const downloadSubtitle = async () => {
     cancel: true,
     persistent: true,
   }).onOk(async (val) => {
-    const [, err] = await LibraryApi.downloadSubtitle({
+    const [res, err] = await LibraryApi.downloadSubtitle({
       video_type: VIDEO_TYPE_MOVIE,
       physical_video_file_full_path: props.data.video_f_path,
       task_priority_level: val, // 一般的队列等级是5，如果想要快，那么可以先默认这里填写3，这样就可以插队
@@ -144,6 +145,8 @@ const downloadSubtitle = async () => {
     });
     if (err !== null) {
       SystemMessage.error(err.message);
+    } else if (res.message === 'video is locked') {
+      SystemMessage.warn('该视频已锁定（字幕已满意），请先解锁再下载', { timeout: 3000 });
     } else {
       SystemMessage.success('已加入下载队列');
     }
@@ -158,6 +161,13 @@ watch(subtitleUploadList, (val, oldVal) => {
     (!val.find((e) => e.video_f_path === props.data.video_f_path) &&
       oldVal.find((e) => e.video_f_path === props.data.video_f_path))
   ) {
+    getDetailInfo();
+  }
+});
+
+// a subtitle picked in the search dialog was saved
+useEventBus('subtitle-saved', (path) => {
+  if (path === props.data.video_f_path) {
     getDetailInfo();
   }
 });

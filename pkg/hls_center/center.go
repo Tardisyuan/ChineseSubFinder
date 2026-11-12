@@ -76,7 +76,7 @@ func (c *Center) WritePlaylist(urlTemplate string, videoFileFPath string, w io.W
 		} else {
 			fmt.Fprintf(w, "#EXTINF: %f,\n", leftover)
 		}
-		fmt.Fprintf(w, getUrl(segmentIndex)+"\n")
+		fmt.Fprintln(w, getUrl(segmentIndex))
 		segmentIndex++
 		leftover = leftover - hlsSegmentLength
 	}

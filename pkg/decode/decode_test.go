@@ -12,7 +12,7 @@ import (
 
 func TestGetImdbAndYearMovieXml(t *testing.T) {
 
-	rootDir := unit_test_helper.GetTestDataResourceRootPath([]string{"movies", "Army of the Dead (2021)"}, 4, false)
+	rootDir := unit_test_helper.TestData(t, []string{"movies", "Army of the Dead (2021)"}, 4, false)
 
 	wantid := "tt0993840"
 	wantyear := "2021"
@@ -42,7 +42,7 @@ func Test_getImdbAndYearNfo(t *testing.T) {
 	}{
 		{
 			name: "Army of the Dead (2021) WEBDL-1080p.nfo", args: args{
-				nfoFilePath: filepath.Join(unit_test_helper.GetTestDataResourceRootPath([]string{"movies", "Army of the Dead (2021)"}, 4, false), "Army of the Dead (2021) WEBDL-1080p.nfo"),
+				nfoFilePath: filepath.Join(unit_test_helper.TestData(t, []string{"movies", "Army of the Dead (2021)"}, 4, false), "Army of the Dead (2021) WEBDL-1080p.nfo"),
 				rootKey:     "movie",
 			},
 			want: types.VideoNfoInfo{
@@ -55,7 +55,7 @@ func Test_getImdbAndYearNfo(t *testing.T) {
 		},
 		{
 			name: "tvshow_00 (2).nfo", args: args{
-				nfoFilePath: filepath.Join(unit_test_helper.GetTestDataResourceRootPath([]string{"nfo_files", "tvshow"}, 4, false), "tvshow_00 (2).nfo"),
+				nfoFilePath: filepath.Join(unit_test_helper.TestData(t, []string{"nfo_files", "tvshow"}, 4, false), "tvshow_00 (2).nfo"),
 				rootKey:     "tvshow",
 			},
 			want: types.VideoNfoInfo{
@@ -67,7 +67,7 @@ func Test_getImdbAndYearNfo(t *testing.T) {
 		},
 		{
 			name: "tvshow_00 (3).nfo", args: args{
-				nfoFilePath: filepath.Join(unit_test_helper.GetTestDataResourceRootPath([]string{"nfo_files", "tvshow"}, 4, false), "tvshow_00 (3).nfo"),
+				nfoFilePath: filepath.Join(unit_test_helper.TestData(t, []string{"nfo_files", "tvshow"}, 4, false), "tvshow_00 (3).nfo"),
 				rootKey:     "tvshow",
 			},
 			want: types.VideoNfoInfo{
@@ -79,7 +79,7 @@ func Test_getImdbAndYearNfo(t *testing.T) {
 		},
 		{
 			name: "tvshow_00 (63).nfo", args: args{
-				nfoFilePath: filepath.Join(unit_test_helper.GetTestDataResourceRootPath([]string{"nfo_files", "tvshow"}, 3, false), "tvshow_00 (63).nfo"),
+				nfoFilePath: filepath.Join(unit_test_helper.TestData(t, []string{"nfo_files", "tvshow"}, 3, false), "tvshow_00 (63).nfo"),
 				rootKey:     "tvshow",
 			},
 			want: types.VideoNfoInfo{
@@ -150,7 +150,7 @@ func TestGetImdbInfo4SeriesDir(t *testing.T) {
 	}{
 		{
 			name: "Loki",
-			args: args{seriesDir: unit_test_helper.GetTestDataResourceRootPath([]string{"series", "Loki"}, 4, false)},
+			args: args{seriesDir: unit_test_helper.TestData(t, []string{"series", "Loki"}, 4, false)},
 			want: types.VideoNfoInfo{
 				ImdbId:      "tt9140554",
 				Title:       "Loki",
@@ -160,7 +160,7 @@ func TestGetImdbInfo4SeriesDir(t *testing.T) {
 		},
 		{
 			name: "辛普森一家",
-			args: args{seriesDir: unit_test_helper.GetTestDataResourceRootPath([]string{"series", "辛普森一家"}, 4, false)},
+			args: args{seriesDir: unit_test_helper.TestData(t, []string{"series", "辛普森一家"}, 4, false)},
 			want: types.VideoNfoInfo{
 				ImdbId:      "tt0096697",
 				Title:       "The Simpsons",
@@ -185,39 +185,11 @@ func TestGetImdbInfo4SeriesDir(t *testing.T) {
 
 func TestIsFakeBDMVWorked(t *testing.T) {
 
-	rootDir := unit_test_helper.GetTestDataResourceRootPath([]string{"movies", "失控玩家 (2021)"}, 4, false)
+	rootDir := unit_test_helper.TestData(t, []string{"movies", "失控玩家 (2021)"}, 4, false)
 
 	bok, dbmvFPath, _ := IsFakeBDMVWorked(filepath.Join(rootDir, "失控玩家 (2021).mp4"))
 	if bok == false {
 		t.Fatal("IsFakeBDMVWorked error")
 	}
 	println(dbmvFPath)
-}
-
-func TestGetImdbInfo4Movie(t *testing.T) {
-	//type args struct {
-	//	movieFileFullPath string
-	//}
-	//tests := []struct {
-	//	name    string
-	//	args    args
-	//	want    types.VideoNfoInfo
-	//	wantErr bool
-	//}{
-	//	{name: "00", args: args{
-	//		movieFileFullPath: "X:\\电影\\Death on the Nile (2022)\\Death on the Nile (2022) Bluray-1080p.mkv",
-	//	}},
-	//}
-	//for _, tt := range tests {
-	//	t.Run(tt.name, func(t *testing.T) {
-	//		got, err := GetVideoNfoInfo4Movie(tt.args.movieFileFullPath)
-	//		if (err != nil) != tt.wantErr {
-	//			t.Errorf("GetVideoNfoInfo4Movie() error = %v, wantErr %v", err, tt.wantErr)
-	//			return
-	//		}
-	//		if !reflect.DeepEqual(got, tt.want) {
-	//			t.Errorf("GetVideoNfoInfo4Movie() got = %v, want %v", got, tt.want)
-	//		}
-	//	})
-	//}
 }

@@ -181,6 +181,8 @@ func (s *Supplier) getSubListFromFile(videoFPath string, isMovie bool) ([]suppli
 		//}
 	}
 
+	preferForVideo(searchSubResult, videoFPath, isMovie)
+
 	videoFileName := filepath.Base(videoFPath)
 	for index, subInfo := range searchSubResult.Sub.Subs {
 
@@ -455,6 +457,7 @@ type SearchSubResult struct {
 			} `json:"lang,omitempty"`
 			Id          flexInt `json:"id,omitempty"`
 			FileId      flexInt `json:"fileid,omitempty"` // newer replies; used when id is missing
+			MLang       string  `json:"m_lang,omitempty"` // newer replies: "英&nbsp;简&nbsp;繁&nbsp;双语"
 			VoteScore   flexInt `json:"vote_score,omitempty"`
 			Videoname   string  `json:"videoname,omitempty"`
 			ReleaseSite string  `json:"release_site,omitempty"`

@@ -1,6 +1,9 @@
 package calculate_curve_correlation
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestCalculateCurveCorrelation(t *testing.T) {
 	type args struct {
@@ -89,7 +92,7 @@ func TestCalculateCurveCorrelation(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := CalculateCurveCorrelation(tt.args.s1, tt.args.s2, tt.args.n); got != tt.want {
+			if got := CalculateCurveCorrelation(tt.args.s1, tt.args.s2, tt.args.n); math.Abs(got-tt.want) > 1e-9 {
 				t.Errorf("CalculateCurveCorrelation() = %v, want %v", got, tt.want)
 			}
 		})

@@ -1,7 +1,10 @@
 package cache_center
 
 import (
+	"os"
 	"testing"
+
+	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/settings"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/types/language"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/types/supplier"
@@ -10,6 +13,12 @@ import (
 )
 
 func TestCacheCenter_DownloadFileAdd(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := os.Getwd()
+	_ = os.Chdir(dir)
+	defer os.Chdir(old)
+	settings.SetConfigRootPath(dir)
+
 	cc := NewCacheCenter("testFile", log_helper.GetLogger4Tester())
 
 	subInfo := supplier.NewSubInfo(

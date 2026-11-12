@@ -5,13 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg"
-
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/file_downloader"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/cache_center"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/log_helper"
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/random_auth_key"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/unit_test_helper"
 )
 
@@ -27,8 +24,9 @@ func TestGetList(t *testing.T) {
 	//movie1 := "X:\\连续剧\\瑞克和莫蒂 (2013)\\Season 5\\Rick and Morty - S05E01 - Mort Dinner Rick Andre WEBDL-1080p.mkv"
 	//movie1 := "X:\\电影\\手机 (2003)\\手机 (2003) 720p Cooker.rmvb"
 
-	settings.SetConfigRootPath(pkg.ConfigRootDirFPath())
-	rootDir := unit_test_helper.GetTestDataResourceRootPath([]string{"sub_spplier"}, 5, true)
+	unit_test_helper.NeedNetwork(t)
+	settings.SetConfigRootPath(t.TempDir())
+	rootDir := unit_test_helper.TestData(t, []string{"sub_spplier"}, 5, true)
 	rootDir = filepath.Join(rootDir, "xunlei")
 
 	gVideoFPath, err := unit_test_helper.GenerateXunleiVideoFile(rootDir)
@@ -57,14 +55,6 @@ var xunleiInstance *Supplier
 
 func defInstance() {
 
-	pkg.ReadCustomAuthFile(log_helper.GetLogger4Tester())
-
-	authKey := random_auth_key.AuthKey{
-		BaseKey:  pkg.BaseKey(),
-		AESKey16: pkg.AESKey16(),
-		AESIv16:  pkg.AESIv16(),
-	}
-
 	xunleiInstance = NewSupplier(file_downloader.NewFileDownloader(
-		cache_center.NewCacheCenter("test", log_helper.GetLogger4Tester()), authKey))
+		cache_center.NewCacheCenter("test", log_helper.GetLogger4Tester())))
 }

@@ -24,6 +24,21 @@ func headerToken(c *gin.Context) string {
 	return fields[1]
 }
 
+// SetTokenCookie stores the Web UI token in the browser, for as long as the token lives.
+func SetTokenCookie(c *gin.Context, token string) {
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie(TokenCookieName, token, int(common.AccessTokenLifetime.Seconds()), "/", "", false, true)
+}
+
+// checkToken checks the Web UI token and keeps the cookie alive while the token is in use.
+func checkToken(c *gin.Context, token string) bool {
+	ok, renewed := common.CheckAccessToken(token)
+	if renewed {
+		SetTokenCookie(c, token)
+	}
+	return ok
+}
+
 func reject(c *gin.Context, message string) {
 	c.JSON(http.StatusUnauthorized, backend.ReplyCheckAuth{Message: message})
 	c.Abort()
@@ -37,7 +52,7 @@ func CheckAuth() gin.HandlerFunc {
 			reject(context, "Request Header Authorization Error")
 			return
 		}
-		if nowAccessToken != common.GetAccessToken() {
+		if !checkToken(context, nowAccessToken) {
 			reject(context, "AccessToken Error")
 			return
 		}
@@ -69,7 +84,7 @@ func CheckStaticAuth() gin.HandlerFunc {
 		if nowAccessToken == "" {
 			nowAccessToken, _ = context.Cookie(TokenCookieName)
 		}
-		if nowAccessToken == "" || nowAccessToken != common.GetAccessToken() {
+		if !checkToken(context, nowAccessToken) {
 			reject(context, "AccessToken Error")
 			return
 		}

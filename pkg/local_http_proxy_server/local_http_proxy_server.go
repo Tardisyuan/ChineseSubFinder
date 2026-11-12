@@ -64,7 +64,6 @@ func GetProxyUrl() string {
 	localHttpProxyUrl, err := localHttpProxyServer.Start(proxyInfos, localHttpProxyServerPort)
 	if err != nil {
 		panic(fmt.Sprintln("start local http proxy server error:", err))
-		return ""
 	}
 
 	return localHttpProxyUrl

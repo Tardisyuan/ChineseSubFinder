@@ -22,6 +22,7 @@ type Settings struct {
 	DeveloperSettings     *DeveloperSettings     `json:"developer_settings"`
 	TimelineFixerSettings *TimelineFixerSettings `json:"timeline_fixer_settings"`
 	ExperimentalFunction  *ExperimentalFunction  `json:"experimental_function"`
+	NotificationSettings  *NotificationSettings  `json:"notification_settings"`
 }
 
 // Get 获取 Settings 的实例
@@ -138,6 +139,7 @@ func NewSettings(configRootDirFPath string) *Settings {
 		DeveloperSettings:     NewDeveloperSettings(),
 		TimelineFixerSettings: NewTimelineFixerSettings(),
 		ExperimentalFunction:  NewExperimentalFunction(),
+		NotificationSettings:  NewNotificationSettings(),
 	}
 }
 
@@ -168,6 +170,12 @@ func (s *Settings) Save() error {
 		return err
 	}
 	s.EmbySettings.AddressUrl = newEmbyAddressUrl
+	// The password is only ever written as a hash; this also migrates plaintext configs.
+	if s.UserInfo != nil {
+		if err = s.UserInfo.hashPassword(); err != nil {
+			return err
+		}
+	}
 
 	return strcut_json.ToFile(s.configFPath, s)
 }

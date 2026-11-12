@@ -7,8 +7,36 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 )
+
+// NetworkTestEnv is the opt-in switch for tests that talk to real web sites.
+const NetworkTestEnv = "CSF_TEST_NETWORK"
+
+// TestData is GetTestDataResourceRootPath for tests: it skips the calling test when the external
+// ChineseSubFinder-TestData repo (cloned next to this repo) or the wanted folder in it is missing,
+// so `go test ./...` stays green on a plain checkout and the skip shows up with -v.
+func TestData(t testing.TB, resourceFolderNames []string, goBackTimes int, userCopyData bool) string {
+	t.Helper()
+	orgPath := GetTestDataResourceRootPath(resourceFolderNames, goBackTimes, false)
+	if IsDir(orgPath) == false {
+		t.Skipf("needs the %s repo, not found at %s", testResourceProjectName, orgPath)
+	}
+	if userCopyData == false {
+		return orgPath
+	}
+	return GetTestDataResourceRootPath(resourceFolderNames, goBackTimes, true)
+}
+
+// NeedNetwork skips the calling test unless CSF_TEST_NETWORK=1 is set. Tests behind it send
+// requests to real third party sites, which must not happen in CI or by accident.
+func NeedNetwork(t testing.TB) {
+	t.Helper()
+	if os.Getenv(NetworkTestEnv) != "1" {
+		t.Skipf("talks to the real network, set %s=1 to run it", NetworkTestEnv)
+	}
+}
 
 // GetTestDataResourceRootPath 向上返回几层就能够到 ChineseSubFinder-TestData 同级目录，然后进入其中的 resourceFolderName 资源文件夹中
 func GetTestDataResourceRootPath(resourceFolderNames []string, goBackTimes int, userCopyData bool) string {

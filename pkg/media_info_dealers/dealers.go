@@ -5,24 +5,22 @@ import (
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/internal/models"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/settings"
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/subtitle_best_api"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/tmdb_api"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
 type Dealers struct {
-	Logger          *logrus.Logger
-	SubtitleBestApi *subtitle_best_api.SubtitleBestApi
-	tmdbHelper      *tmdb_api.TmdbApi
+	Logger     *logrus.Logger
+	tmdbHelper *tmdb_api.TmdbApi
 }
 
 // ErrNoTmdbKey means no TMDB API key is configured. The upstream shared lookup service it used
 // to fall back to is gone, so media info has to come from the user's key or the local nfo files.
 var ErrNoTmdbKey = errors.New("未配置 TMDB API Key（原公用查询接口已下线），请在“进阶配置”中填写 TMDB API Key")
 
-func NewDealers(log *logrus.Logger, subtitleBestApi *subtitle_best_api.SubtitleBestApi) *Dealers {
-	return &Dealers{Logger: log, SubtitleBestApi: subtitleBestApi}
+func NewDealers(log *logrus.Logger) *Dealers {
+	return &Dealers{Logger: log}
 }
 
 func (d *Dealers) SetTmdbHelperInstance(tmdbHelper *tmdb_api.TmdbApi) {

@@ -195,7 +195,7 @@ func (t *TmdbApi) ConvertId(iD string, idType string, isMovieOrSeries bool) (con
 			return convertIdResult, nil
 		}
 	} else {
-		return nil, fmt.Errorf("id type is not supported: " + idType)
+		return nil, fmt.Errorf("id type is not supported: %s", idType)
 	}
 }
 

@@ -9,7 +9,7 @@ import (
 
 func TestCalculate(t *testing.T) {
 
-	rootDir := unit_test_helper.GetTestDataResourceRootPath([]string{"sub_spplier"}, 4, true)
+	rootDir := unit_test_helper.TestData(t, []string{"sub_spplier"}, 4, true)
 	rootDir = filepath.Join(rootDir, "csf")
 
 	gVideoFPath, err := unit_test_helper.GenerateCSFVideoFile(rootDir)

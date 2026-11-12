@@ -32,21 +32,27 @@ func (cb *ControllerBase) LoginHandler(c *gin.Context) {
 		return
 	}
 
-	if settings.Get().UserInfo.Username != nowUserInfo.Username ||
-		settings.Get().UserInfo.Password != nowUserInfo.Password {
-		// 账号密码不匹配
-		c.JSON(http.StatusBadRequest, backend2.ReplyCommon{Message: "Username or Password Error"})
-		return
-	} else {
-		// 用户账号密码匹配
-		nowAccessToken := pkg.GenerateAccessToken()
-		common.SetAccessToken(nowAccessToken)
-		// The static file routes (posters, subtitles) are requested by the browser without
-		// the Authorization header, so the token also goes into a cookie.
-		c.SetSameSite(http.SameSiteStrictMode)
-		c.SetCookie(middle.TokenCookieName, nowAccessToken, 30*24*3600, "/", "", false, true)
-		c.JSON(http.StatusOK, backend2.ReplyLogin{AccessToken: nowAccessToken,
-			Settings: *settings.Get().GetNoPasswordSettings()})
+	// Failed logins are counted per client address; too many in a row lock it out for a while.
+	clientIP := c.RemoteIP()
+	if wait := loginGuard.blockedFor(clientIP); wait > 0 {
+		tooManyAttempts(c, wait)
 		return
 	}
+
+	if !settings.Get().UserInfo.CheckLogin(nowUserInfo.Username, nowUserInfo.Password) {
+		// 账号密码不匹配
+		loginGuard.fail(clientIP)
+		cb.fileDownloader.Log.Warnln("Login failed from", clientIP)
+		c.JSON(http.StatusBadRequest, backend2.ReplyCommon{Message: "Username or Password Error"})
+		return
+	}
+	// 用户账号密码匹配
+	loginGuard.success(clientIP)
+	nowAccessToken := pkg.GenerateAccessToken()
+	common.SetAccessToken(nowAccessToken)
+	// The static file routes (posters, subtitles) are requested by the browser without
+	// the Authorization header, so the token also goes into a cookie.
+	middle.SetTokenCookie(c, nowAccessToken)
+	c.JSON(http.StatusOK, backend2.ReplyLogin{AccessToken: nowAccessToken,
+		Settings: *settings.Get().GetNoPasswordSettings()})
 }

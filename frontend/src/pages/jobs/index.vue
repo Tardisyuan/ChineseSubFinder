@@ -19,6 +19,24 @@
           @click="batchUpdatePriority('low')"
         />
         <q-btn :disable="selected.length === 0" label="修改状态" color="primary" outline @click="batchUpdateStatus" />
+        <q-btn
+          :color="failedJobs.length ? 'negative' : 'grey-7'"
+          :outline="!form.failedOnly"
+          unelevated
+          icon="error_outline"
+          :label="`失败 ${failedJobs.length}`"
+          :title="form.failedOnly ? '显示全部任务' : '只看下载失败或出错的任务'"
+          @click="form.failedOnly = !form.failedOnly"
+        />
+        <q-btn
+          v-if="form.failedOnly && failedJobs.length"
+          color="primary"
+          outline
+          icon="replay"
+          label="全部重试"
+          title="把所有失败的任务放回队列并优先下载"
+          @click="retryAllFailed"
+        />
 
         <q-space class="gt-sm" />
 
@@ -74,8 +92,35 @@
           </q-td>
         </template>
 
+        <template v-slot:body-cell-errorInfo="{ row }">
+          <q-td>
+            <div v-if="row.error_info" class="job-error ellipsis" :class="{ 'text-negative': isFailed(row) }">
+              {{ row.error_info }}
+              <q-tooltip max-width="480px" style="word-break: break-all">{{ row.error_info }}</q-tooltip>
+            </div>
+          </q-td>
+        </template>
+
         <template v-slot:body-cell-actions="{ row }">
           <q-td>
+            <template v-if="isFailed(row)">
+              <q-btn flat dense round size="sm" color="primary" icon="replay" title="立即重试" @click="retry(row)" />
+              <q-btn
+                flat
+                dense
+                round
+                size="sm"
+                color="grey-7"
+                icon="block"
+                title="忽略这个任务，不再重试"
+                @click="ignore(row)"
+              />
+              <btn-dialog-search-subtitle
+                round
+                :path="row.video_f_path"
+                :is-movie="row.video_type === VIDEO_TYPE_MOVIE"
+              />
+            </template>
             <job-detail-btn-dialog :data="row" />
             <job-log-btn-dialog :data="row" />
           </q-td>
@@ -87,6 +132,11 @@
             <empty-state v-else-if="loadError" icon="error_outline" title="队列加载失败" :hint="loadError">
               <q-btn color="primary" outline label="重试" @click="refresh" />
             </empty-state>
+            <empty-state
+              v-else-if="data.length && form.failedOnly && !failedJobs.length"
+              icon="task_alt"
+              title="没有失败的任务"
+            />
             <empty-state v-else-if="data.length" icon="filter_alt_off" title="没有符合筛选条件的任务" />
             <empty-state
               v-else
@@ -105,9 +155,10 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import JobApi from 'src/api/JobApi';
 import { SystemMessage } from 'src/utils/message';
-import { VIDEO_TYPE_NAME_MAP } from 'src/constants/SettingConstants';
+import { VIDEO_TYPE_MOVIE, VIDEO_TYPE_NAME_MAP } from 'src/constants/SettingConstants';
 import {
   JOB_STATUS_COLOR_MAP,
+  JOB_STATUS_FAILED,
   JOB_STATUS_IGNORE,
   JOB_STATUS_MAP,
   JOB_STATUS_OPTIONS,
@@ -117,6 +168,8 @@ import { useQuasar } from 'quasar';
 import JobLogBtnDialog from 'pages/jobs/JobLogBtnDialog';
 import JobDetailBtnDialog from 'pages/jobs/JobDetailBtnDialog';
 import EmptyState from 'components/EmptyState';
+import BtnDialogSearchSubtitle from 'pages/library/BtnDialogSearchSubtitle';
+import useEventBus from 'src/composables/use-event-bus';
 
 const $q = useQuasar();
 
@@ -138,7 +191,7 @@ const columns = [
   { label: '创建时间', field: 'added_time', format: formatTime, align: 'left' },
   { label: '更新时间', field: 'update_time', format: formatTime, align: 'left' },
   // { label: '媒体服务器ID', field: 'media_server_inside_video_id' },
-  { label: '错误信息', field: 'error_info', align: 'left' },
+  { label: '错误信息', field: 'error_info', name: 'errorInfo', align: 'left' },
   { label: '下载次数', field: 'download_times', align: 'left' },
   { label: '重试次数', field: 'retry_times', align: 'left' },
   { label: '操作', name: 'actions', align: 'left', headerClasses: 'sticky-column-header' },
@@ -153,20 +206,29 @@ const form = reactive({
   status: null,
   videoType: null,
   priority: null,
+  failedOnly: false,
 });
 
+// Failed for good (too old to retry), or still waiting after a failed attempt: the queue
+// keeps such a job "waiting" and retries it later, the error is only in error_info.
+const isFailed = (job) =>
+  job.job_status === JOB_STATUS_FAILED || (job.job_status === JOB_STATUS_PENDING && !!job.error_info);
+const failedJobs = computed(() => data.value.filter(isFailed));
+
+// the words change-job-status understands; with the Chinese labels used before, every
+// status change silently dropped the job to low priority
 const JOB_PRIORITY_NUM2STR_MAP = {
-  0: '高',
-  1: '高',
-  2: '高',
-  3: '高',
-  4: '中',
-  5: '中',
-  6: '中',
-  7: '低',
-  8: '低',
-  9: '低',
-  10: '低',
+  0: 'high',
+  1: 'high',
+  2: 'high',
+  3: 'high',
+  4: 'middle',
+  5: 'middle',
+  6: 'middle',
+  7: 'low',
+  8: 'low',
+  9: 'low',
+  10: 'low',
 };
 
 const getData = async () => {
@@ -188,8 +250,11 @@ const refresh = () => {
 };
 
 const filteredData = computed(() => {
-  const { search, status, videoType, priority } = form;
+  const { search, status, videoType, priority, failedOnly } = form;
   return data.value.filter((item) => {
+    if (failedOnly && !isFailed(item)) {
+      return false;
+    }
     if (search !== '') {
       if (
         !(
@@ -302,6 +367,52 @@ const batchUpdateStatus = async () => {
   });
 };
 
+const retry = async (job) => {
+  const [res, err] = await JobApi.retry(job.id);
+  if (err !== null || res.message !== 'ok') {
+    SystemMessage.error(err?.message ?? res.message);
+  } else {
+    SystemMessage.success('已放回队列，将优先下载', { timeout: 2000 });
+  }
+  refresh();
+};
+
+const retryAllFailed = async () => {
+  const jobs = failedJobs.value;
+  $q.dialog({
+    title: '全部重试',
+    message: `把 ${jobs.length} 个失败的任务放回队列并优先下载？`,
+    cancel: true,
+    persistent: true,
+    focus: 'none',
+  }).onOk(async () => {
+    const results = await Promise.all(jobs.map((job) => JobApi.retry(job.id)));
+    const errorCount = results.filter(([res, err]) => err !== null || res.message !== 'ok').length;
+    if (errorCount > 0) {
+      SystemMessage.error(`${errorCount} 个任务重试失败`);
+    } else {
+      SystemMessage.success(`已把 ${jobs.length} 个任务放回队列`, { timeout: 2000 });
+    }
+    refresh();
+  });
+};
+
+const ignore = async (job) => {
+  const [, err] = await JobApi.update(job.id, {
+    job_status: JOB_STATUS_IGNORE,
+    task_priority: JOB_PRIORITY_NUM2STR_MAP[job.task_priority],
+  });
+  if (err !== null) {
+    SystemMessage.error(err.message);
+  } else {
+    SystemMessage.success('已忽略该任务', { timeout: 2000 });
+  }
+  refresh();
+};
+
+// a subtitle picked in the search dialog marks the job done
+useEventBus('subtitle-saved', refresh);
+
 onMounted(() => {
   getData();
 });
@@ -316,6 +427,19 @@ onMounted(() => {
     z-index: 1;
     background-color: var(--csf-surface);
     box-shadow: -5px 0 5px -3px rgba(0, 0, 0, 0.15);
+  }
+
+  .job-error {
+    max-width: 280px;
+  }
+
+  // the action column is too wide to stay pinned on a phone
+  @media (max-width: $breakpoint-xs-max) {
+    th:last-child,
+    td:last-child {
+      position: static;
+      box-shadow: none;
+    }
   }
 }
 </style>

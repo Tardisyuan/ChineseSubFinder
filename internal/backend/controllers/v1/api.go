@@ -43,6 +43,12 @@ func (cb *ControllerBase) AddJobHandler(c *gin.Context) {
 			return
 		}
 	}
+	// 字幕已满意，不再自动更换: a locked video is not queued. Answered as a normal reply
+	// so MoviePilot does not treat it as an error.
+	if cb.cronHelper.Downloader.ScanLogic.Get(videoListAdd.VideoType, videoListAdd.PhysicalVideoFileFullPath) == true {
+		c.JSON(http.StatusOK, backend2.ReplyJobThings{Message: msgVideoLocked})
+		return
+	}
 	videoType := common.Movie
 	if videoListAdd.VideoType == 1 {
 		videoType = common.Series

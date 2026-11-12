@@ -1,32 +1,15 @@
 package imdb_helper
 
 import (
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/local_http_proxy_server"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/log_helper"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/media_info_dealers"
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/random_auth_key"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/settings"
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/subtitle_best_api"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/tmdb_api"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/types"
+	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/unit_test_helper"
 	"testing"
 )
-
-func TestGetVideoInfoFromIMDB(t *testing.T) {
-	//imdbID := "tt12708542" // 星球大战：残次品
-	//imdbID := "tt7016936" // 杀死伊芙
-	//imdbID := "tt2990738" 	// 恐怖直播
-	//imdbID := "tt3032476" 	// 风骚律师
-	//imdbID := "tt6468322" 	// 纸钞屋
-	//imdbID := "tt15299712" // 云南虫谷
-	//imdbID := "tt6856242" // The King`s Man
-	//imdbInfo, err := getVideoInfoFromIMDBWeb(types.VideoNfoInfo{ImdbId: imdbID})
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
-	//t.Logf("\n\n Name:  %s\tYear:  %d\tID:  %s", imdbInfo.Name, imdbInfo.Year, imdbInfo.ID)
-}
 
 func TestIsChineseVideo(t *testing.T) {
 	type args struct {
@@ -61,6 +44,8 @@ func TestIsChineseVideo(t *testing.T) {
 		},
 	}
 
+	// needs a TMDB API key in ./ChineseSubFinderSettings.json besides the network
+	unit_test_helper.NeedNetwork(t)
 	defInstance()
 
 	for _, tt := range tests {
@@ -84,20 +69,11 @@ func TestIsChineseVideo(t *testing.T) {
 func defInstance() {
 
 	settings.SetConfigRootPath(".")
-	pkg.ReadCustomAuthFile(log_helper.GetLogger4Tester())
-
-	authKey := random_auth_key.AuthKey{
-		BaseKey:  pkg.BaseKey(),
-		AESKey16: pkg.AESKey16(),
-		AESIv16:  pkg.AESIv16(),
-	}
-
 	err := local_http_proxy_server.SetProxyInfo(settings.Get().AdvancedSettings.ProxySettings.GetInfos())
 	if err != nil {
 		panic(err)
 	}
-	dealers = media_info_dealers.NewDealers(log_helper.GetLogger4Tester(),
-		subtitle_best_api.NewSubtitleBestApi(log_helper.GetLogger4Tester(), authKey))
+	dealers = media_info_dealers.NewDealers(log_helper.GetLogger4Tester())
 
 	tmdbApi, err := tmdb_api.NewTmdbHelper(log_helper.GetLogger4Tester(), settings.Get().AdvancedSettings.TmdbApiSettings.ApiKey, true)
 	if err != nil {
@@ -109,20 +85,3 @@ func defInstance() {
 var (
 	dealers *media_info_dealers.Dealers
 )
-
-func TestGetIMDBInfoFromVideoFile(t *testing.T) {
-
-	defInstance()
-
-	imdbInfo, err := GetIMDBInfoFromVideoFile(dealers, "X:\\电影\\西虹市首富 (2018)\\西虹市首富 (2018) 720p AAC.mkv", true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("\n\n Name:  %s\tYear:  %d\tID:  %s", imdbInfo.Name, imdbInfo.Year, imdbInfo.Languages[0])
-
-	imdbInfo, err = GetIMDBInfoFromVideoFile(dealers, "X:\\连续剧\\黄石 (2018)\\Season 1\\Yellowstone (2018) - S01E01 - Daybreak Bluray-480p.mkv", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("\n\n Name:  %s\tYear:  %d\tID:  %s", imdbInfo.Name, imdbInfo.Year, imdbInfo.Languages[0])
-}

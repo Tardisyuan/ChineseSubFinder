@@ -10,8 +10,6 @@ import (
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/search"
 
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg"
-
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/path_helper"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/ifaces"
@@ -23,7 +21,6 @@ import (
 	embyHelper "github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/emby_helper"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/file_downloader"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/forced_scan_and_down_sub"
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/movie_helper"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/restore_fix_timeline_bk"
 	seriesHelper "github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/series_helper"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/sub_parser/ass"
@@ -32,22 +29,16 @@ import (
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/sub_supplier/xunlei"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/internal/dao"
-	"github.com/ChineseSubFinder/ChineseSubFinder/internal/models"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/decode"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/imdb_helper"
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/language"
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/mix_media_info"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/settings"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/sort_things"
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/sub_file_hash"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/sub_helper"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/sub_parser_hub"
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/sub_share_center"
 	subTimelineFixerPKG "github.com/ChineseSubFinder/ChineseSubFinder/pkg/sub_timeline_fixer"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/task_control"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/task_queue"
 	"github.com/emirpasic/gods/maps/treemap"
-	"github.com/jinzhu/now"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
@@ -129,11 +120,6 @@ func (v *VideoScanAndRefreshHelper) Start(scanLogic *scan_logic.ScanLogic) error
 	if err != nil {
 		v.log.Errorln("FilterMovieAndSeriesNeedDownload", err)
 		return err
-	}
-	if settings.Get().ExperimentalFunction.ShareSubSettings.ShareSubEnabled == true {
-		v.log.Infoln("ShareSubEnabled is true, will scan share sub")
-		// 根据上面得到的 scanResult 的 Normal 部分进行字幕的扫描，也存入到 VideoSubInfo 中，但是需要标记这个是低可信度的
-		//v.scanLowVideoSubInfo(scanResult)
 	}
 
 	return nil
@@ -356,214 +342,6 @@ func (v *VideoScanAndRefreshHelper) RefreshMediaServerSubList() error {
 	}
 
 	return nil
-}
-
-// scanLowVideoSubInfo 扫描低可信度的字幕信息
-func (v *VideoScanAndRefreshHelper) scanLowVideoSubInfo(scanVideoResult *ScanVideoResult) {
-
-	// 需要根据搜索到的字幕或者视频信息与 VideoSubInfo 的信息进行交叉
-	if scanVideoResult.Normal == nil {
-		return
-	}
-
-	shareRootDir, err := pkg.GetShareSubRootFolder()
-	if err != nil {
-		v.log.Errorln("scanLowVideoSubInfo.GetShareSubRootFolder", err)
-		return
-	}
-
-	// 先处理电影
-	scanVideoResult.Normal.MoviesDirMap.Any(func(movieDirRootPath interface{}, movieFPath interface{}) bool {
-
-		videoFPathList := movieFPath.([]string)
-		for videoIndex, videoFPath := range videoFPathList {
-
-			v.log.Infoln("--------------------------------------------------------------------------------")
-			v.log.Infoln("scanLowVideoSubInfo.MovieHasChineseSub", videoIndex, videoFPath)
-			mixMediaInfo, err := mix_media_info.GetMixMediaInfo(v.fileDownloader.MediaInfoDealers, videoFPath, true)
-			if err != nil {
-				v.log.Warningln("scanLowVideoSubInfo.GetMixMediaInfo", videoFPath, err)
-				continue
-			}
-			// 这个视频有对应的文中字幕
-			bFoundChineseSub, _, chineseSubFitVideoNameFullPathList, err := movie_helper.MovieHasChineseSub(v.log, videoFPath)
-			if err != nil {
-				v.log.Warningln("scanLowVideoSubInfo.MovieHasChineseSub", videoFPath, err)
-				continue
-			}
-			if bFoundChineseSub == false {
-				// 没有找到中文字幕，那么就不需要下载了
-				v.log.Infoln("scanLowVideoSubInfo.MovieHasChineseSub", videoFPath, "not found chinese sub")
-				continue
-			}
-
-			// 使用本程序的 hash 的算法，得到视频的唯一 ID
-			fileHash, err := sub_file_hash.Calculate(videoFPath)
-			if err != nil {
-				v.log.Warningln("scanLowVideoSubInfo.ComputeFileHash", videoFPath, err)
-				continue
-			}
-			// 得到的这些字幕需要进行一次 sha256 的排除，因为是多个站点下载的，可能是重复的
-			subSha256Map := make(map[string]string)
-			for _, orgSubFPath := range chineseSubFitVideoNameFullPathList {
-				// 计算需要插入字幕的 sha256
-				saveSHA256String, err := pkg.GetFileSHA256String(orgSubFPath)
-				if err != nil {
-					v.log.Warningln("scanLowVideoSubInfo.GetFileSHA256String", orgSubFPath, err)
-					continue
-				}
-				subSha256Map[saveSHA256String] = orgSubFPath
-			}
-			// 排除重复 sha256 后的字幕
-			for _, orgSubFPath := range subSha256Map {
-				v.log.Infoln(orgSubFPath)
-				// 需要得到这个视频对应的字幕的绝对地址
-				v.addLowVideoSubInfo(true, 0, 0, orgSubFPath, mixMediaInfo, shareRootDir, fileHash)
-			}
-		}
-
-		return false
-	})
-	// 处理连续剧  media root dir -- series dir
-	scanVideoResult.Normal.SeriesDirMap.Any(func(seriesDirRootPath interface{}, seriesFPath interface{}) bool {
-
-		seriesDirRootFPathLisst := seriesFPath.([]string)
-		for seriesDirIndex, seriesDirRootFPath := range seriesDirRootFPathLisst {
-
-			seriesInfo, err := seriesHelper.ReadSeriesInfoFromDir(v.fileDownloader.MediaInfoDealers, seriesDirRootFPath, 90, true, true)
-			if err != nil {
-				v.log.Warningln("scanLowVideoSubInfo.ReadSeriesInfoFromDir", seriesDirRootFPath, err)
-				return false
-			}
-
-			if len(seriesInfo.EpList) < 1 {
-				continue
-			}
-
-			mixMediaInfo, err := mix_media_info.GetMixMediaInfo(v.fileDownloader.MediaInfoDealers, seriesInfo.EpList[0].FileFullPath, false)
-			if err != nil {
-				v.log.Warningln("scanLowVideoSubInfo.GetMixMediaInfo", seriesInfo.EpList[0].FileFullPath, err)
-				continue
-			}
-
-			for i, episodeInfo := range seriesInfo.EpList {
-
-				videoFPath := episodeInfo.FileFullPath
-				v.log.Infoln("--------------------------------------------------------------------------------")
-				v.log.Infoln("scanLowVideoSubInfo.ReadSeriesInfoFromDir", seriesDirIndex, i, videoFPath)
-				// 使用本程序的 hash 的算法，得到视频的唯一 ID
-				fileHash, err := sub_file_hash.Calculate(videoFPath)
-				if err != nil {
-					v.log.Warningln("scanLowVideoSubInfo.ComputeFileHash", videoFPath, err)
-					continue
-				}
-				// 得到的这些字幕需要进行一次 sha256 的排除，因为是多个站点下载的，可能是重复的
-				subSha256Map := make(map[string]string)
-				// 这个视频有对应的文中字幕
-				for _, subInfo := range episodeInfo.SubAlreadyDownloadedList {
-
-					orgSubFPath := subInfo.FileFullPath
-					if language.HasChineseLang(subInfo.Language) == false {
-						v.log.Warningln("scanLowVideoSubInfo.HasChineseLang Skip", videoFPath, subInfo.Language)
-						continue
-					}
-					// 计算需要插入字幕的 sha256
-					saveSHA256String, err := pkg.GetFileSHA256String(orgSubFPath)
-					if err != nil {
-						v.log.Warningln("scanLowVideoSubInfo.GetFileSHA256String", orgSubFPath, err)
-						continue
-					}
-					subSha256Map[saveSHA256String] = orgSubFPath
-				}
-				// 排除重复 sha256 后的字幕
-				for _, orgSubFPath := range subSha256Map {
-					v.log.Infoln(orgSubFPath)
-					// 需要得到这个视频对应的字幕的绝对地址
-					v.addLowVideoSubInfo(false, episodeInfo.Season, episodeInfo.Episode, orgSubFPath, mixMediaInfo, shareRootDir, fileHash)
-				}
-			}
-		}
-
-		return false
-	})
-}
-
-// 从绝对字幕路径和 mixMediaInfo 信息判断是否需要存储这个低可信度的字幕
-func (v *VideoScanAndRefreshHelper) addLowVideoSubInfo(isMovie bool, Season, Eps int, orgSubFPath string, mixMediaInfo *models.MediaInfo, shareRootDir string, fileHash string) {
-
-	// 计算需要插入字幕的 sha256
-	saveSHA256String, err := pkg.GetFileSHA256String(orgSubFPath)
-	if err != nil {
-		v.log.Warningln("scanLowVideoSubInfo.GetFileSHA256String", orgSubFPath, err)
-		return
-	}
-	// 这个字幕文件是否已经存在了 LowVideoSubInfo
-	var lowVideoSubInfos []models.LowVideoSubInfo
-	dao.GetDb().Where("sha256 = ?", saveSHA256String).Find(&lowVideoSubInfos)
-	if len(lowVideoSubInfos) > 0 {
-		// 存在，跳过
-		v.log.Infoln("scanLowVideoSubInfo.SHA256 LowVideoSubInfo Exist == true, Skip", orgSubFPath)
-		return
-	}
-	// 这个字幕文件是否已经存在了 LowVideoSubInfo
-	var videoSubInfos []models.VideoSubInfo
-	dao.GetDb().Where("sha256 = ?", saveSHA256String).Find(&videoSubInfos)
-	if len(videoSubInfos) > 0 {
-		// 存在，跳过
-		v.log.Infoln("scanLowVideoSubInfo.SHA256 VideoSubInfo Exist == true, Skip", orgSubFPath)
-		return
-	}
-
-	parseTime, err := now.Parse(mixMediaInfo.Year)
-	if err != nil {
-		v.log.Warningln("ParseTime", mixMediaInfo.Year, err)
-		return
-	}
-	// 把现有的字幕 copy 到缓存目录中
-	bok, subCacheFPath := sub_share_center.CopySub2Cache(v.log, orgSubFPath, mixMediaInfo.ImdbId, parseTime.Year(), true)
-	if bok == false {
-		v.log.Warningln("scanLowVideoSubInfo.CopySub2Cache", orgSubFPath, err)
-		return
-	}
-	// 不存在，插入，建立关系
-	bok, fileInfo, err := v.SubParserHub.DetermineFileTypeFromFile(subCacheFPath)
-	if err != nil {
-		v.log.Warningln("scanLowVideoSubInfo.DetermineFileTypeFromFile", mixMediaInfo.ImdbId, err)
-		return
-	}
-	if bok == false {
-		v.log.Warningln("scanLowVideoSubInfo.DetermineFileTypeFromFile == false", mixMediaInfo.ImdbId)
-		return
-	}
-	// 转相对路径存储
-	subRelPath, err := filepath.Rel(shareRootDir, subCacheFPath)
-	if err != nil {
-		v.log.Warningln("scanLowVideoSubInfo.Rel", mixMediaInfo.ImdbId, err)
-		return
-	}
-	// 字幕的情况
-	_, _, _, _, extraSubPreName := v.subFormatter.IsMatchThisFormat(filepath.Base(subCacheFPath))
-
-	oneLowVideoSubInfo := models.NewLowVideoSubInfo(
-		mixMediaInfo.ImdbId,
-		mixMediaInfo.TmdbId,
-		fileHash,
-		filepath.Base(subCacheFPath),
-		language.MyLang2ISO_639_1_String(fileInfo.Lang),
-		language.IsBilingualSubtitle(fileInfo.Lang),
-		language.MyLang2ChineseISO(fileInfo.Lang),
-		fileInfo.Lang.String(),
-		subRelPath,
-		extraSubPreName,
-		saveSHA256String,
-		isMovie,
-	)
-
-	oneLowVideoSubInfo.Season = Season
-	oneLowVideoSubInfo.Episode = Eps
-
-	dao.GetDb().Save(oneLowVideoSubInfo)
-	return
 }
 
 func (v *VideoScanAndRefreshHelper) ScrabbleUpVideoList(scanVideoResult *ScanVideoResult, pathUrlMap map[string]string) ([]backend2.MovieInfo, []backend2.SeasonInfo) {

@@ -109,18 +109,6 @@ func DefTmpFolder() string {
 	return _defTmpFolder
 }
 
-func DefRodTmpRootFolder() string {
-	var err error
-	if _defRodTmpRootFolder == "" {
-		_defRodTmpRootFolder, err = GetRodTmpRootFolder()
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	return _defRodTmpRootFolder
-}
-
 func DefSubFixCacheFolder() string {
 	var err error
 	if _defSubFixCacheFolder == "" {
@@ -131,18 +119,6 @@ func DefSubFixCacheFolder() string {
 	}
 
 	return _defSubFixCacheFolder
-}
-
-func AdblockTmpFolder() string {
-	var err error
-	if _adblockTmpFolder == "" {
-		_adblockTmpFolder, err = GetPluginFolderByName(Plugin_Adblock)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	return _adblockTmpFolder
 }
 
 // LiteMode ---------------------------------------------
@@ -178,9 +154,7 @@ var (
 	_configRootDirFPath   = ""
 	_defDebugFolder       = ""
 	_defTmpFolder         = ""
-	_defRodTmpRootFolder  = ""
 	_defSubFixCacheFolder = ""
-	_adblockTmpFolder     = ""
 	_liteMode             = false
 	_major                = 0
 	_minor                = 0

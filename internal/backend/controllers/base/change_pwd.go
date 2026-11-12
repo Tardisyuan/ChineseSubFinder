@@ -30,11 +30,20 @@ func (cb *ControllerBase) ChangePwdHandler(c *gin.Context) {
 		return
 	}
 
-	if settings.Get().UserInfo.Password != changePwd.OrgPwd {
+	// Guessing the old password is limited the same way as guessing it at login.
+	clientIP := c.RemoteIP()
+	if wait := loginGuard.blockedFor(clientIP); wait > 0 {
+		tooManyAttempts(c, wait)
+		return
+	}
+
+	if !settings.Get().UserInfo.CheckPassword(changePwd.OrgPwd) {
 		// 原始的密码不对
+		loginGuard.fail(clientIP)
 		c.JSON(http.StatusNoContent, backend2.ReplyCommon{Message: "Org Password Error"})
 	} else {
-		// 同意修改密码
+		// 同意修改密码，Save 会把新密码换成哈希
+		loginGuard.success(clientIP)
 		settings.Get().UserInfo.Password = changePwd.NewPwd
 		err = settings.Get().Save()
 		if err != nil {

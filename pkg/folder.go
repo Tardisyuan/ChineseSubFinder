@@ -1,7 +1,6 @@
 package pkg
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -146,101 +145,6 @@ func ClearRootTmpFolder() error {
 }
 
 // --------------------------------------------------------------
-// Adblock Cache
-// --------------------------------------------------------------
-
-// GetPluginRootFolder 在程序的根目录新建，取缓用文件夹，每一个视频的缓存将在其中额外新建子集文件夹
-func GetPluginRootFolder() (string, error) {
-
-	nowProcessRoot, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	nowProcessRoot = filepath.Join(nowProcessRoot, cacheRootFolderName, PluginFolder)
-	err = os.MkdirAll(nowProcessRoot, os.ModePerm)
-	if err != nil {
-		return "", err
-	}
-	return nowProcessRoot, err
-}
-
-// GetPluginFolderByName 获取缓存的文件夹，没有则新建
-func GetPluginFolderByName(folderName string) (string, error) {
-	rootPath, err := GetPluginRootFolder()
-	if err != nil {
-		return "", err
-	}
-	tmpFolderFullPath := filepath.Join(rootPath, folderName)
-	err = os.MkdirAll(tmpFolderFullPath, os.ModePerm)
-	if err != nil {
-		return "", err
-	}
-	return tmpFolderFullPath, nil
-}
-
-// ClearPluginFolderByName 清理指定的缓存文件夹
-func ClearPluginFolderByName(folderName string) error {
-
-	nowTmpFolder, err := GetPluginFolderByName(folderName)
-	if err != nil {
-		return err
-	}
-
-	return ClearFolder(nowTmpFolder)
-}
-
-// --------------------------------------------------------------
-// Rod Cache
-// --------------------------------------------------------------
-
-// GetRodTmpRootFolder 在程序的根目录新建，rod 缓存用文件夹
-func GetRodTmpRootFolder() (string, error) {
-
-	nowProcessRoot, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	nowProcessRoot = filepath.Join(nowProcessRoot, cacheRootFolderName, RodCacheFolder)
-	err = os.MkdirAll(nowProcessRoot, os.ModePerm)
-	if err != nil {
-		return "", err
-	}
-	return nowProcessRoot, err
-}
-
-// ClearRodTmpRootFolder 清理 rod 缓存文件夹
-func ClearRodTmpRootFolder() error {
-
-	nowTmpFolder, err := GetRodTmpRootFolder()
-	if err != nil {
-		return err
-	}
-
-	pathSep := string(os.PathSeparator)
-	files, err := os.ReadDir(nowTmpFolder)
-	if err != nil {
-		return err
-	}
-	for _, curFile := range files {
-		fullPath := nowTmpFolder + pathSep + curFile.Name()
-		if curFile.IsDir() {
-			err = os.RemoveAll(fullPath)
-			if err != nil {
-				return err
-			}
-		} else {
-			// 这里就是文件了
-			err = os.Remove(fullPath)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-// --------------------------------------------------------------
 // Sub Fix Cache
 // --------------------------------------------------------------
 
@@ -305,42 +209,6 @@ func GetShareSubRootFolder() (string, error) {
 		return "", err
 	}
 	return nowProcessRoot, err
-}
-
-// GetShareFolderByYear 缓存的文件夹以发行的年为一个单位存储
-func GetShareFolderByYear(year int) (string, error) {
-	rootPath, err := GetShareSubRootFolder()
-	if err != nil {
-		return "", err
-	}
-	tmpFolderFullPath := filepath.Join(rootPath, fmt.Sprintf("%d", year))
-	err = os.MkdirAll(tmpFolderFullPath, os.ModePerm)
-	if err != nil {
-		return "", err
-	}
-	return tmpFolderFullPath, nil
-}
-
-// ClearShareSubFolderByYear 清理指定的缓存文件夹
-func ClearShareSubFolderByYear(year int) error {
-
-	nowTmpFolder, err := GetShareFolderByYear(year)
-	if err != nil {
-		return err
-	}
-
-	return ClearFolder(nowTmpFolder)
-}
-
-// ClearShareSubFolderByYearAndName 清理指定的缓存文件夹
-func ClearShareSubFolderByYearAndName(year int, name string) error {
-
-	nowTmpFolder, err := GetShareFolderByYear(year)
-	if err != nil {
-		return err
-	}
-
-	return ClearFolder(filepath.Join(nowTmpFolder, name))
 }
 
 // --------------------------------------------------------------
@@ -589,18 +457,12 @@ func ClearIdleSubFixCacheFolder(l *logrus.Logger, rootSubFixCacheFolder string, 
 const (
 	cacheRootFolderName           = "cache"                       // 缓存文件夹总名称
 	TmpFolder                     = "tmp"                         // 临时缓存的文件夹
-	RodCacheFolder                = "rod"                         // rod 的缓存目录
-	PluginFolder                  = "Plugin"                      // 插件的目录
 	DebugFolder                   = "CSF-DebugThings"             // 调试相关的文件夹
 	SubFixCacheFolder             = "CSF-SubFixCache"             // 字幕时间校正的缓存文件夹，一般可以不清理
 	ShareSubFileCache             = "CSF-ShareSubCache"           // 字幕共享的缓存目录，不建议删除
 	CacheCenterFolder             = "CSF-CacheCenter"             // 下载缓存、队列缓存、下载次数缓存的文件夹
 	ManualSubUploadCacheFolder    = "CSF-ManualSubUploadCache"    // 手动上传字幕的缓存文件夹
 	VideoAndSubPreviewCacheFolder = "CSF-VideoAndSubPreviewCache" // 视频和字幕的预览缓存
-)
-
-const (
-	Plugin_Adblock = "adblock"
 )
 
 // 配置文件的位置信息，这个会根据系统版本做区分

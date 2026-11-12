@@ -30,23 +30,23 @@ func (d *Downloader) movieDlFunc(ctx context.Context, job taskQueue2.OneJob, dow
 	organizeSubFiles, err := nowSubSupplierHub.DownloadSub4Movie(job.VideoFPath, downloadIndex)
 	if err != nil {
 		err = errors.New(fmt.Sprintf("subSupplierHub.DownloadSub4Movie: %v, %v", job.VideoFPath, err))
-		d.downloadQueue.AutoDetectUpdateJobStatus(job, err)
+		d.jobFinished(job, err)
 		return err
 	}
 	// 返回的两个值都是 nil 的时候，就是没有下载到字幕
 	if organizeSubFiles == nil || len(organizeSubFiles) < 1 {
 		d.log.Infoln(task_queue.ErrNoSubFound.Error(), filepath.Base(job.VideoFPath))
-		d.downloadQueue.AutoDetectUpdateJobStatus(job, task_queue.ErrNoSubFound)
+		d.jobFinished(job, task_queue.ErrNoSubFound)
 		return nil
 	}
 
 	err = d.oneVideoSelectBestSub(job.VideoFPath, organizeSubFiles)
 	if err != nil {
-		d.downloadQueue.AutoDetectUpdateJobStatus(job, err)
+		d.jobFinished(job, err)
 		return err
 	}
 
-	d.downloadQueue.AutoDetectUpdateJobStatus(job, nil)
+	d.jobFinished(job, nil)
 
 	d.refreshMediaServer(job)
 
@@ -73,7 +73,7 @@ func (d *Downloader) seriesDlFunc(ctx context.Context, job taskQueue2.OneJob, do
 		epsMap)
 	if err != nil {
 		err = errors.New(fmt.Sprintf("seriesDlFunc.ReadSeriesInfoFromDir, Error: %v", err))
-		d.downloadQueue.AutoDetectUpdateJobStatus(job, err)
+		d.jobFinished(job, err)
 		return err
 	}
 	// 下载好的字幕文件
@@ -84,13 +84,13 @@ func (d *Downloader) seriesDlFunc(ctx context.Context, job taskQueue2.OneJob, do
 		downloadIndex)
 	if err != nil {
 		err = errors.New(fmt.Sprintf("seriesDlFunc.DownloadSub4Series %v S%vE%v %v", filepath.Base(job.SeriesRootDirPath), job.Season, job.Episode, err))
-		d.downloadQueue.AutoDetectUpdateJobStatus(job, err)
+		d.jobFinished(job, err)
 		return err
 	}
 	// 是否下载到字幕了
 	if organizeSubFiles == nil || len(organizeSubFiles) < 1 {
 		d.log.Infoln(task_queue.ErrNoSubFound.Error(), filepath.Base(job.VideoFPath), job.Season, job.Episode)
-		d.downloadQueue.AutoDetectUpdateJobStatus(job, task_queue.ErrNoSubFound)
+		d.jobFinished(job, task_queue.ErrNoSubFound)
 		return nil
 	}
 
@@ -133,7 +133,7 @@ func (d *Downloader) seriesDlFunc(ctx context.Context, job taskQueue2.OneJob, do
 		case <-ctx.Done():
 			{
 				err = errors.New(fmt.Sprintf("cancel at NeedDlEpsKeyList.oneVideoSelectBestSub, %v S%dE%d", seriesInfo.Name, episodeInfo.Season, episodeInfo.Episode))
-				d.downloadQueue.AutoDetectUpdateJobStatus(job, err)
+				d.jobFinished(job, err)
 				return err
 			}
 		}
@@ -190,7 +190,7 @@ func (d *Downloader) seriesDlFunc(ctx context.Context, job taskQueue2.OneJob, do
 		case <-ctx.Done():
 			{
 				err = errors.New(fmt.Sprintf("cancel at NeedDlEpsKeyList.oneVideoSelectBestSub, %v S%dE%d", seriesInfo.Name, episodeInfo.Season, episodeInfo.Episode))
-				d.downloadQueue.AutoDetectUpdateJobStatus(job, err)
+				d.jobFinished(job, err)
 				return err
 			}
 		}
@@ -206,11 +206,11 @@ func (d *Downloader) seriesDlFunc(ctx context.Context, job taskQueue2.OneJob, do
 	if save2LocalSubCount < 1 {
 		// 下载的字幕都没有一个能够写入到本地的，那么就有问题了
 		errSave2Local = noSubSavedErr(errSave2Local)
-		d.downloadQueue.AutoDetectUpdateJobStatus(job, errSave2Local)
+		d.jobFinished(job, errSave2Local)
 		return errSave2Local
 	}
 	// 哪怕有一个写入到本地成功了，也无需对本次任务报错
-	d.downloadQueue.AutoDetectUpdateJobStatus(job, nil)
+	d.jobFinished(job, nil)
 	d.refreshMediaServer(job)
 
 	return nil

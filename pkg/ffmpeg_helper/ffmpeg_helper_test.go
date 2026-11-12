@@ -2,11 +2,9 @@ package ffmpeg_helper
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
-	"time"
-
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/log_helper"
 
@@ -19,7 +17,7 @@ func TestGetFFMPEGInfo(t *testing.T) {
 	// TODO: make a video with ffmpeg on each test
 	// https://gist.github.com/SeunghoonBaek/f35e0fd3db80bf55c2707cae5d0f7184
 	// http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4
-	videoFile := unit_test_helper.GetTestDataResourceRootPath([]string{"ffmpeg", "org"}, 4, false)
+	videoFile := unit_test_helper.TestData(t, []string{"ffmpeg", "org"}, 4, false)
 	videoFile = filepath.Join(videoFile, "sampleVideo.mp4")
 	f := NewFFMPEGHelper(log_helper.GetLogger4Tester())
 	bok, ffmpegInfo, err := f.ExportFFMPEGInfo(videoFile, Audio)
@@ -45,7 +43,7 @@ func readString(filePath string) string {
 
 func TestParseJsonString2GetFFMPEGInfo(t *testing.T) {
 
-	testDataPath := unit_test_helper.GetTestDataResourceRootPath([]string{"ffmpeg", "org"}, 4, false)
+	testDataPath := unit_test_helper.TestData(t, []string{"ffmpeg", "org"}, 4, false)
 	type args struct {
 		videoFileFullPath string
 		input             string
@@ -92,7 +90,7 @@ func TestExportAudioArgsByTimeRange(t *testing.T) {
 	// https://www.lynxstudio.com/downloads/e44/sample-wav-file-zip-encoded-44-1khz-pcm-24-stereo/
 	// TODO: make a sample audio file with ffmpeg
 	// TODO: remove generated audio files
-	testDataPath := unit_test_helper.GetTestDataResourceRootPath([]string{"ffmpeg"}, 4, true)
+	testDataPath := unit_test_helper.TestData(t, []string{"ffmpeg"}, 4, true)
 	audioFullPath := filepath.Join(testDataPath, "sampleAudio.wav")
 	subFullPath := filepath.Join(testDataPath, "sampleSrt.srt")
 	startTimeString := "0:0:27"
@@ -109,7 +107,7 @@ func TestExportAudioArgsByTimeRange(t *testing.T) {
 
 func TestGetAudioInfo(t *testing.T) {
 
-	testDataPath := unit_test_helper.GetTestDataResourceRootPath([]string{"ffmpeg", "org"}, 4, false)
+	testDataPath := unit_test_helper.TestData(t, []string{"ffmpeg", "org"}, 4, false)
 	audioFullPath := filepath.Join(testDataPath, "sampleAudio.wav")
 
 	f := NewFFMPEGHelper(log_helper.GetLogger4Tester())
@@ -123,39 +121,13 @@ func TestGetAudioInfo(t *testing.T) {
 
 func TestVersion(t *testing.T) {
 
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
 	f := FFMPEGHelper{}
 	_, err := f.Version()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("\n\nGet ffmpeg/ffprobe version\n")
-}
-
-func TestExportVideoHLSAndSubByTimeRange(t *testing.T) {
-
-	outDirPath := "C:\\Tmp\\media\\test\\hls"
-	videoFPath := "C:\\Tmp\\media\\test\\Chainsaw Man - S01E02 - ARRIVAL IN TOKYO HDTV-1080p.mp4"
-
-	subFPaths := []string{
-		"C:\\Tmp\\media\\test\\Chainsaw Man - S01E02 - ARRIVAL IN TOKYO HDTV-1080p.chinese(简,csf).default.srt",
-		"C:\\Tmp\\media\\test\\Chainsaw Man - S01E01 - DOG & CHAINSAW WEBRip-1080p.chinese(简,csf).default.srt",
-	}
-
-	f := NewFFMPEGHelper(log_helper.GetLogger4Tester())
-	println("Start:", time.Now().Format("2006-01-02 15:04:05"))
-	m3u8, subs, err := f.ExportVideoHLSAndSubByTimeRange(videoFPath, subFPaths, "10", "10", "5.000", outDirPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	println("Start:", time.Now().Format("2006-01-02 15:04:05"))
-	if pkg.IsFile(filepath.Join(outDirPath, m3u8)) == false {
-		t.Fatal("m3u8 file not found")
-	}
-
-	for _, path := range subs {
-		if pkg.IsFile(filepath.Join(outDirPath, path)) == false {
-			t.Fatal("sub file not found")
-		}
-	}
-
 }

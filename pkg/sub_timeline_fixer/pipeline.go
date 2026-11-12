@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/types/common"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/types/subparser"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/gss"
@@ -193,6 +194,14 @@ func (p Pipeline) FixSubFileTimeline(infoSrc, scaledInfoSrc *subparser.FileInfo,
 		这就需要一个额外的函数去处理这些情况
 	*/
 	timeFormat := scaledInfoSrc.GetTimeFormat()
+	// SRT wants "00:00:12,000"; the one-digit hour of Time2SubTimeString is the ASS form and
+	// turned fixed .srt files into "0:00:12,000", which stricter players do not read.
+	timeString := func(t time.Time) string {
+		if timeFormat == common.TimeFormatPoint3 {
+			return t.Format(timeFormat)
+		}
+		return pkg.Time2SubTimeString(t, timeFormat)
+	}
 	// 如果两个解析出来的对白数量不一致，那么肯定是无法进行下面的匹配的，理论上应该没得问题
 	if len(scaledInfoSrc.Dialogues) != len(infoSrc.Dialogues) {
 		return "", errors.New("FixSubFileTimeline Not The Same Len: scaledInfoSrc.Dialogues and infoSrc.Dialogues")
@@ -232,7 +241,7 @@ func (p Pipeline) FixSubFileTimeline(infoSrc, scaledInfoSrc *subparser.FileInfo,
 			continue
 		}
 		contentReplaceOffsetAll += contentReplaceOffsetNow
-		fixContent = fixContent[:contentReplaceOffsetAll] + strings.Replace(fixContent[contentReplaceOffsetAll:], orgStartTimeString, pkg.Time2SubTimeString(fixTimeStart, timeFormat), 1)
+		fixContent = fixContent[:contentReplaceOffsetAll] + strings.Replace(fixContent[contentReplaceOffsetAll:], orgStartTimeString, timeString(fixTimeStart), 1)
 
 		// contentReplaceOffsetAll 为 -1 的时候那么第一次搜索得到的就一定是可以替换的
 		if contentReplaceOffsetAll == -1 {
@@ -244,7 +253,7 @@ func (p Pipeline) FixSubFileTimeline(infoSrc, scaledInfoSrc *subparser.FileInfo,
 			continue
 		}
 		contentReplaceOffsetAll += contentReplaceOffsetNow
-		fixContent = fixContent[:contentReplaceOffsetAll] + strings.Replace(fixContent[contentReplaceOffsetAll:], orgEndTimeString, pkg.Time2SubTimeString(fixTimeEnd, timeFormat), 1)
+		fixContent = fixContent[:contentReplaceOffsetAll] + strings.Replace(fixContent[contentReplaceOffsetAll:], orgEndTimeString, timeString(fixTimeEnd), 1)
 	}
 
 	dstFile, err := os.Create(desSaveSubFileFullPath)

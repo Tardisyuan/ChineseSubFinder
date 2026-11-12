@@ -1,5 +1,0 @@
-package TestCode
-
-func convertChsCht() {
-
-}

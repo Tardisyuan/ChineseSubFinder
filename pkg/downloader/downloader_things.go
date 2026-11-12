@@ -60,6 +60,7 @@ func (d *Downloader) oneVideoSelectBestSub(oneVideoFullPath string, organizeSubF
 			d.log.Warnln(outString)
 			return errors.New(outString)
 		}
+		noteChosenSub(oneVideoFullPath, organizeSubFiles, *finalSubFile)
 		/*
 			这里还有一个梗，Emby、jellyfin 支持 default 和 forced 扩展字段
 			但是，plex 只支持 forced
@@ -82,6 +83,9 @@ func (d *Downloader) oneVideoSelectBestSub(oneVideoFullPath string, organizeSubF
 			outString := fmt.Sprintln("SelectEachSiteTop1SubFile found none sub file")
 			d.log.Warnln(outString)
 			return errors.New(outString)
+		}
+		if len(finalSubFiles) > 0 {
+			noteChosenSub(oneVideoFullPath, organizeSubFiles, finalSubFiles[0])
 		}
 		// 多网站 Top 1 字幕保存的时候，第一个设置为 Default 即可
 		/*

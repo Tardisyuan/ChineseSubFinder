@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -380,43 +379,6 @@ func CopyDir(src string, dst string) error {
 	return nil
 }
 
-// CloseChrome 强行结束没有关闭的 Chrome 进程
-func CloseChrome(l *logrus.Logger) {
-
-	defer func() {
-		l.Infoln("CloseChrome End")
-	}()
-
-	l.Infoln("CloseChrome Start...")
-
-	cmdString := ""
-	var command *exec.Cmd
-	sysType := runtime.GOOS
-	if sysType == "linux" {
-		// LINUX系统
-		cmdString = "pkill chrome"
-		command = exec.Command("/bin/sh", "-c", cmdString)
-	}
-	if sysType == "windows" {
-		// windows系统
-		cmdString = "taskkill /F /im chrome.exe"
-		command = exec.Command("cmd.exe", "/c", cmdString)
-	}
-	if sysType == "darwin" {
-		// macOS
-		// https://stackoverflow.com/questions/57079120/using-exec-command-in-golang-how-do-i-open-a-new-terminal-and-execute-a-command
-		cmdString = `tell application "/Applications/Google Chrome.app" to quit`
-		command = exec.Command("osascript", "-s", "h", "-e", cmdString)
-	}
-	if cmdString == "" || command == nil {
-		l.Errorln("CloseChrome OS:", sysType)
-		return
-	}
-	err := command.Run()
-	if err != nil {
-		l.Warningln("CloseChrome", err)
-	}
-}
 
 // OSCheck 强制的系统支持检查
 func OSCheck() bool {

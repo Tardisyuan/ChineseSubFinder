@@ -1,6 +1,7 @@
 package sub_helper
 
 import (
+	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/log_helper"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/sub_parser/ass"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/sub_parser/srt"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/unit_test_helper"
@@ -60,9 +61,10 @@ func Test_isFirstLetterIsEngLower(t *testing.T) {
 
 func TestNewDialogueMerger(t *testing.T) {
 
-	testRootDir := unit_test_helper.GetTestDataResourceRootPath([]string{"FixTimeline", "org"}, 4, false)
+	testRootDir := unit_test_helper.TestData(t, []string{"FixTimeline", "org"}, 4, false)
+	log := log_helper.GetLogger4Tester()
 
-	subParserHub := sub_parser_hub.NewSubParserHub(ass.NewParser(), srt.NewParser())
+	subParserHub := sub_parser_hub.NewSubParserHub(log, ass.NewParser(log), srt.NewParser(log))
 	//bFind, infoBase, err := subParserHub.DetermineFileTypeFromFile(filepath.Join(testRootDir, "2line-The Card Counter (2021) WEBDL-1080p.chinese(inside).ass"))
 	bFind, infoBase, err := subParserHub.DetermineFileTypeFromFile(filepath.Join(testRootDir, "2line-英_1_0-3-35#150_36#360000.srt"))
 	if err != nil {

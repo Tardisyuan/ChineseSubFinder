@@ -22,6 +22,7 @@
           />
           <q-btn v-else label="立即运行" color="primary" @click="startJobs" :loading="submitting" />
         </template>
+        <q-btn flat dense icon="history" label="下载历史" :to="{ name: 'history' }" />
         <q-btn flat dense icon="refresh" label="刷新" :loading="loading" @click="loadOverview" />
       </div>
     </q-card>

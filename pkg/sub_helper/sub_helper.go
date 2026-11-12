@@ -26,7 +26,9 @@ import (
 )
 
 // OrganizeDlSubFiles 需要从汇总来是网站字幕中，解压对应的压缩包中的字幕出来
-func OrganizeDlSubFiles(log *logrus.Logger, tmpFolderName string, subInfos []supplier.SubInfo, isMovie bool) (map[string][]string, error) {
+// absEps (optional, series only) maps an absolute episode number to the real season/episode,
+// for releases that count episodes across seasons; see EpisodeRef.
+func OrganizeDlSubFiles(log *logrus.Logger, tmpFolderName string, subInfos []supplier.SubInfo, isMovie bool, absEps ...map[int]EpisodeRef) (map[string][]string, error) {
 
 	// 缓存列表，整理后的字幕列表
 	// SxEx - []string 字幕的路径
@@ -88,6 +90,7 @@ func OrganizeDlSubFiles(log *logrus.Logger, tmpFolderName string, subInfos []sup
 				continue
 			}
 			// 这里需要给这些下载到的文件进行改名，加是从那个网站来的前缀，后续好查找
+			useDlEpisode := isMovie == false && subInfos[i].Episode > 0 && namesCarryNoEpisode(subFileFullPaths)
 			for _, fileFullPath := range subFileFullPaths {
 				if isMovie == false {
 					// 连续剧的情况
@@ -96,13 +99,19 @@ func OrganizeDlSubFiles(log *logrus.Logger, tmpFolderName string, subInfos []sup
 					if err != nil {
 						continue
 					}
-					if nowSeason == 0 && nowEps > 0 {
+					if ref, ok := absEpisode(absEps, nowSeason, nowEps); ok {
+						nowSeason, nowEps = ref.Season, ref.Episode
+					} else if nowSeason == 0 && nowEps > 0 {
 						// episode-only name ("第02集", "EP02"): it belongs to the season this
 						// download was for
 						nowSeason = subInfos[i].Season
 						if nowSeason == 0 {
 							nowSeason = 1
 						}
+					} else if nowEps == 0 && useDlEpisode {
+						// "Show.chs.ass" inside an archive that was downloaded for one episode:
+						// without this it was filed under S0E0 (or SxE0) and never used
+						nowSeason, nowEps = subInfos[i].Season, subInfos[i].Episode
 					}
 					newSubName := AddFrontName(subInfos[i], filepath.Base(fileFullPath))
 					newSubNameFullPath := filepath.Join(tmpFolderFullPath, newSubName)

@@ -2,8 +2,11 @@ package main
 
 import (
 	"flag"
+	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg"
@@ -12,7 +15,6 @@ import (
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/cron_helper"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/file_downloader"
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/random_auth_key"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/internal/backend"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/cache_center"
@@ -131,12 +133,7 @@ func main() {
 	// ------------------------------------------------------------------------
 	// 改进为优先启动 http server，这样后面的初始化操作的进度，就不会跟之前一样，无法把进度呈现到 Web 前端给用户看
 	fileDownloader := file_downloader.NewFileDownloader(
-		cache_center.NewCacheCenter("local_task_queue", loggerBase),
-		random_auth_key.AuthKey{
-			BaseKey:  pkg.BaseKey(),
-			AESKey16: pkg.AESKey16(),
-			AESIv16:  pkg.AESIv16(),
-		})
+		cache_center.NewCacheCenter("local_task_queue", loggerBase))
 	// ----------------------------------------------
 	// 定时任务实例
 	cronHelper := cron_helper.NewCronHelper(fileDownloader)
@@ -148,9 +145,36 @@ func main() {
 	bend := backend.NewBackEnd(loggerBase, cronHelper, nowPort, restartSignal)
 	go bend.Restart()
 	restartSignal <- 1
-	// 阻塞
-	select {}
+	// Block until docker stop / Ctrl+C. Without a handler the process died on the spot,
+	// whatever it was writing. Docker sends SIGKILL 10 seconds after SIGTERM, so everything
+	// here has to fit in that.
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	got := <-sig
+	signal.Stop(sig) // a second signal kills at once
+	loggerBase.Infoln("Got signal", got.String()+", shutting down...")
+	done := make(chan struct{})
+	go func() {
+		bend.Stop()
+		// Cancels the library scan and waits for the subtitle job that is running: a job
+		// cannot be interrupted. If it does not end in time it is left marked as downloading
+		// and the next start puts it back to waiting (TaskQueue.afterRead).
+		cronHelper.Stop()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(shutdownTimeout):
+		loggerBase.Warningln("Shutdown: a job is still running after", shutdownTimeout, ", it will be retried on next start")
+	}
+	fileDownloader.CacheCenter.Close()
+	dao.CloseDb()
+	loggerBase.Infoln("Shutdown done.")
+	os.Exit(0)
 }
+
+// shutdownTimeout leaves 2 of Docker's default 10 seconds to close the databases.
+const shutdownTimeout = 8 * time.Second
 
 /*
 	使用 git tag 来做版本描述，然后在编译的时候传入版本号信息到这个变量上

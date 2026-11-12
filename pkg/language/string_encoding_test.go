@@ -22,20 +22,20 @@ func TestChangeFileCoding2UTF8(t *testing.T) {
 		{
 			name: "00",
 			args: args{
-				subFileFPath: filepath.Join(unit_test_helper.GetTestDataResourceRootPath([]string{"change_sub_encode", "org-utf-8"}, 4, true),
+				subFileFPath: filepath.Join(unit_test_helper.TestData(t, []string{"change_sub_encode", "org-utf-8"}, 4, true),
 					"Seven.Worlds.One.Planet.S01E01.Antarctica.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.TrueHD.7.1.Atmos-FGT.chinese(简英,subhd).ass"),
 			},
-			wantDesSubFileFPath: filepath.Join(unit_test_helper.GetTestDataResourceRootPath([]string{"change_sub_encode", "org-utf-8"}, 4, true),
+			wantDesSubFileFPath: filepath.Join(unit_test_helper.TestData(t, []string{"change_sub_encode", "org-utf-8"}, 4, true),
 				"Seven.Worlds.One.Planet.S01E01.Antarctica.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.TrueHD.7.1.Atmos-FGT.chinese(简英,subhd-utf-8).ass"),
 			wantErr: false,
 		},
 		{
 			name: "01",
 			args: args{
-				subFileFPath: filepath.Join(unit_test_helper.GetTestDataResourceRootPath([]string{"change_sub_encode", "org-utf-8"}, 4, true),
+				subFileFPath: filepath.Join(unit_test_helper.TestData(t, []string{"change_sub_encode", "org-utf-8"}, 4, true),
 					"Seven.Worlds.One.Planet.S01E07.Africa.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.TrueHD.7.1.Atmos-FGT.chinese(简英,zimuku).default.srt"),
 			},
-			wantDesSubFileFPath: filepath.Join(unit_test_helper.GetTestDataResourceRootPath([]string{"change_sub_encode", "org-utf-8"}, 4, true),
+			wantDesSubFileFPath: filepath.Join(unit_test_helper.TestData(t, []string{"change_sub_encode", "org-utf-8"}, 4, true),
 				"Seven.Worlds.One.Planet.S01E07.Africa.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.TrueHD.7.1.Atmos-FGT.chinese(简英,zimuku-utf-8).default.srt"),
 			wantErr: false,
 		},
@@ -77,20 +77,20 @@ func TestChangeFileCoding2GBK(t *testing.T) {
 		{
 			name: "00",
 			args: args{
-				subFileFPath: filepath.Join(unit_test_helper.GetTestDataResourceRootPath([]string{"change_sub_encode", "org-utf-8"}, 4, true),
+				subFileFPath: filepath.Join(unit_test_helper.TestData(t, []string{"change_sub_encode", "org-utf-8"}, 4, true),
 					"Seven.Worlds.One.Planet.S01E01.Antarctica.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.TrueHD.7.1.Atmos-FGT.chinese(简英,subhd).ass"),
 			},
-			wantDesSubFileFPath: filepath.Join(unit_test_helper.GetTestDataResourceRootPath([]string{"change_sub_encode", "org-utf-8"}, 4, true),
+			wantDesSubFileFPath: filepath.Join(unit_test_helper.TestData(t, []string{"change_sub_encode", "org-utf-8"}, 4, true),
 				"Seven.Worlds.One.Planet.S01E01.Antarctica.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.TrueHD.7.1.Atmos-FGT.chinese(简英,subhd-gbk).ass"),
 			wantErr: false,
 		},
 		{
 			name: "01",
 			args: args{
-				subFileFPath: filepath.Join(unit_test_helper.GetTestDataResourceRootPath([]string{"change_sub_encode", "org-utf-8"}, 4, true),
+				subFileFPath: filepath.Join(unit_test_helper.TestData(t, []string{"change_sub_encode", "org-utf-8"}, 4, true),
 					"Seven.Worlds.One.Planet.S01E07.Africa.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.TrueHD.7.1.Atmos-FGT.chinese(简英,zimuku).default.srt"),
 			},
-			wantDesSubFileFPath: filepath.Join(unit_test_helper.GetTestDataResourceRootPath([]string{"change_sub_encode", "org-utf-8"}, 4, true),
+			wantDesSubFileFPath: filepath.Join(unit_test_helper.TestData(t, []string{"change_sub_encode", "org-utf-8"}, 4, true),
 				"Seven.Worlds.One.Planet.S01E07.Africa.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.TrueHD.7.1.Atmos-FGT.chinese(简英,zimuku-gbk).default.srt"),
 			wantErr: false,
 		},

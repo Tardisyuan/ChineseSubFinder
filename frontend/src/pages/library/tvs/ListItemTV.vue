@@ -28,6 +28,7 @@ import DialogTVDetail from 'pages/library/tvs/DialogTVDetail';
 import LibraryApi from 'src/api/LibraryApi';
 import { subtitleUploadList } from 'pages/library/use-library';
 import PosterImage from 'pages/library/PosterImage';
+import useEventBus from 'src/composables/use-event-bus';
 
 const props = defineProps({
   data: Object,
@@ -64,6 +65,13 @@ watch(subtitleUploadList, (val, oldValue) => {
     detailInfo.value?.one_video_info.some((e) => oldValue.map((f) => f.video_f_path).includes(e.video_f_path)) &&
     !detailInfo.value?.one_video_info.some((e) => val.map((f) => f.video_f_path).includes(e.video_f_path))
   ) {
+    getDetailInfo();
+  }
+});
+
+// a subtitle picked in the search dialog was saved
+useEventBus('subtitle-saved', (path) => {
+  if (detailInfo.value?.one_video_info.some((e) => e.video_f_path === path)) {
     getDetailInfo();
   }
 });

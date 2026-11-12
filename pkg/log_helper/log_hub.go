@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -180,27 +181,23 @@ func CleanAndLoadOnceLogs() {
 
 	pathRoot := filepath.Join(pkg.ConfigRootDirFPath(), "Logs")
 	// 扫描当前日志存储目录下有多少个符合要求的 Once- 日志
-	// 确保有且仅有最近的 20 次扫描日志记录存在即可
+	// 只保留最近 onceLogMaxCount 个任务日志（任务被删除时它的日志也会一起删除，见 TaskQueue.del）
 	matches, err := filepath.Glob(filepath.Join(pathRoot, common.OnceLogPrefix+"*.log"))
 	if err != nil {
 		panic(err)
 	}
 	if len(matches) > onceLogMaxCount {
-		// 需要清理多余的
-		// 保存的文件名是 Once-unixTime.log 做为前提
-		// 这里假定查询出来的都是正序排序
-		for i := 0; i <= len(matches)-1-onceLogMaxCount; i++ {
-
-			_, err := os.Stat(matches[i])
-			if err != nil {
-				continue
+		// Oldest first by mod time. The names are Once-<job id>.log and job ids are not
+		// ordered in time, so the name order Glob returns removed arbitrary logs.
+		modTime := func(p string) time.Time {
+			if info, err := os.Stat(p); err == nil {
+				return info.ModTime()
 			}
-			_ = os.Remove(matches[i])
+			return time.Time{}
 		}
-		// 将有存在价值的“单次”日志缓存到内存中，供 Web API 查询
-		matches, err = filepath.Glob(filepath.Join(pathRoot, common.OnceLogPrefix+"*.log"))
-		if err != nil {
-			panic(err)
+		sort.Slice(matches, func(i, j int) bool { return modTime(matches[i]).Before(modTime(matches[j])) })
+		for i := 0; i < len(matches)-onceLogMaxCount; i++ {
+			_ = os.Remove(matches[i])
 		}
 	}
 }

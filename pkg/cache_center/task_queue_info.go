@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg"
+	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/strcut_json"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/cache_center/models"
 )
@@ -28,7 +29,8 @@ func (c *CacheCenter) TaskQueueSave(taskPriority int, taskQueueBytes []byte) err
 	c.db.Where("priority = ?", taskPriority).Find(&taskQueues)
 	// 写入到本地存储
 	saveFPath := filepath.Join(c.taskQueueSaveRootPath, fmt.Sprintf("%d", taskPriority)+".tq")
-	err := pkg.WriteFile(saveFPath, taskQueueBytes)
+	// atomic: a kill in the middle of a plain write left a truncated queue file
+	err := strcut_json.WriteFileAtomic(saveFPath, taskQueueBytes, false)
 	if err != nil {
 		return err
 	}

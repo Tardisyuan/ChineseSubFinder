@@ -123,6 +123,7 @@ func InitRouter(
 		GroupV1.GET("/jobs/list", cbV1.JobsListHandler)
 		GroupV1.POST("/jobs/change-job-status", cbV1.ChangeJobStatusHandler)
 		GroupV1.POST("/jobs/log", cbV1.JobLogHandler)
+		GroupV1.POST("/jobs/retry", cbV1.RetryJobHandler)
 
 		//GroupV1.POST("/video/list/refresh", cbV1.RefreshVideoListHandler)
 		GroupV1.GET("/video/list/refresh-status", cbV1.RefreshVideoListStatusHandler)
@@ -145,12 +146,23 @@ func InitRouter(
 		GroupV1.POST("/subtitles/is_manual_upload_2_local_in_queue", cbV1.IsManualUploadSubtitle2LocalJobInQueue)
 		GroupV1.POST("/subtitles/get_generate_upload_url_info", cbV1.GetGenerateUploadURLHandle)
 
+		GroupV1.POST("/subtitles/search/start", cbV1.SubSearchStartHandler)
+		GroupV1.GET("/subtitles/search/status", cbV1.SubSearchStatusHandler)
+		GroupV1.POST("/subtitles/search/pick", cbV1.SubSearchPickHandler)
+
 		GroupV1.POST("/preview/clean_up", cbV1.PreviewCleanUp)
 		GroupV1.GET("/preview/playlist/:videofpathbase64", cbV1.HlsPlaylist)
 		GroupV1.GET("/preview/segments/:resolution/:segment/:videofpathbase64", cbV1.HlsSegment)
 		GroupV1.POST("/preview/search_other_web", cbV1.PreviewSearchOtherWeb)
 		GroupV1.POST("/preview/video_f_path_2_imdb_info", cbV1.PreviewVideoFPath2IMDBInfo)
+
+		GroupV1.GET("/history", cbV1.HistoryListHandler)
+		GroupV1.GET("/history/stats", cbV1.HistoryStatsHandler)
+		GroupV1.POST("/notify/test", cbV1.NotifyTestHandler)
 	}
+	// Not in GroupAPIV1: the handler checks the API key itself, header or ?api_key= (the
+	// Jellyfin Webhook plugin cannot always send headers).
+	router.POST("/api/v1/jellyfin-webhook", cbV1.JellyfinWebhookHandler)
 
 	GroupAPIV1 := router.Group("/api/v1")
 	{

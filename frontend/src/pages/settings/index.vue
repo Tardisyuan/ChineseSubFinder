@@ -59,6 +59,7 @@ import { getJobsStatus, isJobRunning } from 'src/store/systemState';
 import ExperimentSettings from 'pages/settings/SettingsPanelExperiment';
 import FormSubmitArea from 'pages/settings/FormSubmitArea';
 import SubSourceSettings from 'pages/settings/SettingsPanelSubSource';
+import NotifySettings from 'pages/settings/SettingsPanelNotify';
 import JobApi from 'src/api/JobApi';
 import { SystemMessage } from 'src/utils/message';
 
@@ -69,6 +70,7 @@ const tabs = [
   { name: 'advanced', label: '进阶配置', component: AdvancedSettings },
   { name: 'subSource', label: '字幕源设置', component: SubSourceSettings },
   { name: 'emby', label: '媒体库设置', component: EmbySettings },
+  { name: 'notify', label: '通知', component: NotifySettings },
   { name: 'experiment', label: '实验室', component: ExperimentSettings },
 ];
 

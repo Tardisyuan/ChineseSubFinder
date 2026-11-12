@@ -49,6 +49,12 @@ class LibraryApi extends BaseApi {
 
   getSearchSubtitleInfo = (data) => this.http(`/v1/preview/search_other_web`, data, 'POST');
 
+  startSubtitleSearch = (data) => this.http(`/v1/subtitles/search/start`, data, 'POST');
+
+  getSubtitleSearchStatus = () => this.http(`/v1/subtitles/search/status`);
+
+  pickSubtitleSearchResult = (data) => this.http(`/v1/subtitles/search/pick`, data, 'POST');
+
   cleanAllPreviewJobData = () => this.http(`/v1/preview/clean_up`, {}, 'POST');
 
   getVideoM3u8 = (videoPath) => this.http(`/v1/preview/playlist/${encode(encodeURIComponent(videoPath))}`);

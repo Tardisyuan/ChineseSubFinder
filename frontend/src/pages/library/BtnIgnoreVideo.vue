@@ -7,7 +7,7 @@
     dense
     icon="lock"
     @click.stop
-    title="当前视频已锁定，不进行字幕下载"
+    title="已锁定：字幕已满意，不再自动下载或更换（点击解锁）"
     @click="skip"
     v-bind="$attrs"
   />
@@ -17,9 +17,9 @@
     round
     flat
     dense
-    icon="lock"
+    icon="lock_open"
     @click.stop
-    title="点击锁定视频，不进行字幕下载"
+    title="点击锁定：字幕已满意，不再自动下载或更换"
     @click="skip"
     v-bind="$attrs"
   />
@@ -54,7 +54,9 @@ const getIsSkipped = async () => {
 const skip = async () => {
   $q.dialog({
     title: '提示',
-    message: isSkipped.value ? '确定要解锁该视频吗？' : `确定要锁定该视频，不进行字幕下载吗？`,
+    message: isSkipped.value
+      ? '确定要解锁该视频吗？解锁后会恢复自动下载。'
+      : '锁定后表示“字幕已满意”：扫描、下载队列和外部提交（如 MoviePilot）都不会再下载或更换它的字幕。确定锁定吗？',
     cancel: true,
     persistent: true,
   }).onOk(async () => {

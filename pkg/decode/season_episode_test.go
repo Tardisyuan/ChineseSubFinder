@@ -41,6 +41,11 @@ func TestEpisodeOnlyNames(t *testing.T) {
 		{"VisionQuest.S02.E05.srt", 2, 5},
 		{"VisionQuest.1x02.srt", 1, 2},
 		{"幻视任务.S01E02.chs.ass", 1, 2},
+		{"[Group][Title][05][1080p][CHS].ass", 0, 5},
+		{"【字幕组】【标题】【05】【720P】.ass", 0, 5},
+		{"[Group] Title [12v2][HEVC].ass", 0, 12},
+		{"05.chs.ass", 0, 5},
+		{"[Group] Title - 15v2 [1080p].ass", 0, 15},
 	}
 	for _, c := range cases {
 		_, s, e, err := GetSeasonAndEpisodeFromSubFileName(c.name)
@@ -49,9 +54,27 @@ func TestEpisodeOnlyNames(t *testing.T) {
 		}
 	}
 	// must not turn resolutions, years or plain titles into episodes
-	for _, n := range []string{"Jodorowskys.Dune.2013.1080p.BluRay.x264.srt", "Movie - 2013 [1080p].ass", "Some.Movie.chs.ass"} {
+	for _, n := range []string{"Jodorowskys.Dune.2013.1080p.BluRay.x264.srt", "Movie - 2013 [1080p].ass", "Some.Movie.chs.ass", "[Group][Movie][720][x264].ass", "2013.chs.ass"} {
 		if _, s, e, _ := GetSeasonAndEpisodeFromSubFileName(n); e != 0 {
 			t.Errorf("%s: false episode S%d E%d", n, s, e)
+		}
+	}
+}
+
+func TestAbsoluteEpisodeInName(t *testing.T) {
+	cases := []struct {
+		name    string
+		nfoEp   int
+		wantAbs int
+	}{
+		{"[Group] Title - 15 [1080p].mkv", 3, 15},
+		{"[Group] Title - 03 [1080p].mkv", 3, 0},
+		{"Title - S02E03 - Name.mkv", 3, 0},
+		{"Title.mkv", 3, 0},
+	}
+	for _, c := range cases {
+		if got := AbsoluteEpisodeInName(c.name, c.nfoEp); got != c.wantAbs {
+			t.Errorf("%s: got %d want %d", c.name, got, c.wantAbs)
 		}
 	}
 }

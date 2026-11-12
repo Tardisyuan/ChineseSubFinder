@@ -2,13 +2,9 @@ package pre_download_process
 
 import (
 	"errors"
-	"fmt"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/local_http_proxy_server"
-	"time"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg"
-
-	common2 "github.com/ChineseSubFinder/ChineseSubFinder/pkg/types/common"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/file_downloader"
 	subSupplier "github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/sub_supplier"
@@ -18,7 +14,6 @@ import (
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/notify_center"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/settings"
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/something_static"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/types/backend"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/url_connectedness_helper"
 	"github.com/sirupsen/logrus"
@@ -60,41 +55,6 @@ func (p *PreDownloadProcess) Init() *PreDownloadProcess {
 	// 清理通知中心
 	notify_center.Notify.Clear()
 	// ------------------------------------------------------------------------
-	// 获取验证码
-	if pkg.LiteMode() == false {
-
-		nowTT := time.Now()
-		nowTimeFileNamePrix := fmt.Sprintf("%d%d%d", nowTT.Year(), nowTT.Month(), nowTT.Day())
-		updateTimeString, code, err := something_static.GetCodeFromWeb(p.log, nowTimeFileNamePrix, p.fileDownloader)
-		if err != nil {
-			notify_center.Notify.Add("GetSubhdCode", "GetCodeFromWeb,"+err.Error())
-			p.log.Errorln("something_static.GetCodeFromWeb", err)
-			p.log.Errorln("Skip Subhd download")
-			// 没有则需要清空
-			common2.SubhdCode = ""
-		} else {
-
-			// 获取到的更新时间不是当前的日期，那么本次也跳过本次
-			codeTime, err := time.Parse("2006-01-02", updateTimeString)
-			if err != nil {
-				p.log.Errorln("something_static.GetCodeFromWeb.time.Parse", err)
-				// 没有则需要清空
-				common2.SubhdCode = ""
-			} else {
-
-				nowTime := time.Now()
-				if codeTime.YearDay() != nowTime.YearDay() {
-					// 没有则需要清空
-					common2.SubhdCode = ""
-					p.log.Warningln("something_static.GetCodeFromWeb, GetCodeTime:", updateTimeString, "NowTime:", time.Now().String(), "Skip")
-				} else {
-					p.log.Infoln("GetCode", updateTimeString, code)
-					common2.SubhdCode = code
-				}
-			}
-		}
-	}
-	// ------------------------------------------------------------------------
 	// 构建每个字幕站点下载者的实例
 	if settings.Get().SpeedDevMode == true {
 
@@ -116,25 +76,7 @@ func (p *PreDownloadProcess) Init() *PreDownloadProcess {
 			// 如果开启了 ASSRt 字幕源，则需要新增
 			p.SubSupplierHub.AddSubSupplier(assrt.NewSupplier(p.fileDownloader))
 		}
-
-		if pkg.LiteMode() == false {
-			// 如果不是 Lite 模式，那么就可以开启这个功能
-			if common2.SubhdCode != "" {
-				// 如果找到 code 了，那么就可以继续用这个实例
-				//p.SubSupplierHub.AddSubSupplier(subhd.NewSupplier(p.fileDownloader))
-			}
-		}
 	}
-	// ------------------------------------------------------------------------
-	// 清理自定义的 rod 缓存目录
-	err := pkg.ClearRodTmpRootFolder()
-	if err != nil {
-		p.gError = errors.New("ClearRodTmpRootFolder " + err.Error())
-		return p
-	}
-
-	p.log.Infoln("ClearRodTmpRootFolder Done")
-
 	return p
 }
 
@@ -150,28 +92,33 @@ func (p *PreDownloadProcess) Check() *PreDownloadProcess {
 	}()
 	p.log.Infoln("PreDownloadProcess.Check() Start...")
 	// ------------------------------------------------------------------------
-	// 是否启用代理
-	if settings.Get().AdvancedSettings.ProxySettings.UseProxy == false {
+	// The connectivity test below only writes a log line, so it runs on the side. In line it
+	// held up every supplier check (at start and hourly, 2-3 s here, a full timeout when the
+	// target is unreachable) while SupplierCheck keeps the download queue locked.
+	go func() {
+		// 是否启用代理
+		if settings.Get().AdvancedSettings.ProxySettings.UseProxy == false {
 
-		p.log.Infoln("UseHttpProxy = false")
-		// 如果不使用代理，那么默认需要检测 baidu 的连通性，不通过也继续
-		proxyStatus, proxySpeed, err := url_connectedness_helper.UrlConnectednessTest(url_connectedness_helper.BaiduUrl, "")
-		if err != nil {
-			p.log.Errorln(errors.New("UrlConnectednessTest Target Site " + url_connectedness_helper.BaiduUrl + ", " + err.Error()))
+			p.log.Infoln("UseHttpProxy = false")
+			// 如果不使用代理，那么默认需要检测 baidu 的连通性，不通过也继续
+			proxyStatus, proxySpeed, err := url_connectedness_helper.UrlConnectednessTest(url_connectedness_helper.BaiduUrl, "")
+			if err != nil {
+				p.log.Errorln(errors.New("UrlConnectednessTest Target Site " + url_connectedness_helper.BaiduUrl + ", " + err.Error()))
+			} else {
+				p.log.Infoln("UrlConnectednessTest Target Site", url_connectedness_helper.BaiduUrl, "Speed:", proxySpeed, "ms,", "Status:", proxyStatus)
+			}
 		} else {
-			p.log.Infoln("UrlConnectednessTest Target Site", url_connectedness_helper.BaiduUrl, "Speed:", proxySpeed, "ms,", "Status:", proxyStatus)
-		}
-	} else {
 
-		p.log.Infoln("UseHttpProxy By:", settings.Get().AdvancedSettings.ProxySettings.UseWhichProxyProtocol)
-		// 如果使用了代理，那么默认需要检测 google 的连通性，不通过也继续
-		proxyStatus, proxySpeed, err := url_connectedness_helper.UrlConnectednessTest(url_connectedness_helper.GoogleUrl, local_http_proxy_server.GetProxyUrl())
-		if err != nil {
-			p.log.Errorln(errors.New("UrlConnectednessTest Target Site " + url_connectedness_helper.GoogleUrl + ", " + err.Error()))
-		} else {
-			p.log.Infoln("UrlConnectednessTest Target Site", url_connectedness_helper.GoogleUrl, "Speed:", proxySpeed, "ms,", "Status:", proxyStatus)
+			p.log.Infoln("UseHttpProxy By:", settings.Get().AdvancedSettings.ProxySettings.UseWhichProxyProtocol)
+			// 如果使用了代理，那么默认需要检测 google 的连通性，不通过也继续
+			proxyStatus, proxySpeed, err := url_connectedness_helper.UrlConnectednessTest(url_connectedness_helper.GoogleUrl, local_http_proxy_server.GetProxyUrl())
+			if err != nil {
+				p.log.Errorln(errors.New("UrlConnectednessTest Target Site " + url_connectedness_helper.GoogleUrl + ", " + err.Error()))
+			} else {
+				p.log.Infoln("UrlConnectednessTest Target Site", url_connectedness_helper.GoogleUrl, "Speed:", proxySpeed, "ms,", "Status:", proxyStatus)
+			}
 		}
-	}
+	}()
 	// ------------------------------------------------------------------------
 	// 测试提供字幕的网站是有效的，是否下载次数超限
 	p.SiteStatus = p.SubSupplierHub.CheckSubSiteStatus()

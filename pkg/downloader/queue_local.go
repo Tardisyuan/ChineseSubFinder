@@ -55,29 +55,26 @@ func (d *Downloader) queueDownloaderLocal() {
 	}
 	// --------------------------------------------------
 	{
-		// 需要判断这个任务是否需要跳过，但是如果这个任务的优先级很高，那么就不跳过
-		// 正常任务是 5，插队任务是3，一次性任务是 0.
-		if oneJob.TaskPriority > task_queue.HighTaskPriorityLevel {
-			// 说明优先级不高，需要进行判断
-			videoType := 0
-			if oneJob.VideoType == common2.Series {
-				videoType = 1
-			}
-			if d.ScanLogic.Get(videoType, oneJob.VideoFPath) == true {
-				// 需要标记忽略
-				oneJob.JobStatus = taskQueue2.Ignore
-				bok, err = d.downloadQueue.Update(oneJob)
-				if err != nil {
-					d.log.Errorln("d.downloadQueue.Update()", err)
-					return
-				}
-				if bok == false {
-					d.log.Errorln("d.downloadQueue.Update() Failed")
-					return
-				}
-				d.log.Infoln("Download Queue Update Job Status To Ignore (Manual Settings Ignore), VideoFPath:", oneJob.VideoFPath)
+		// A locked video ("字幕已满意，不再自动更换") is skipped whatever the priority. High
+		// priority jobs (the UI's 插队任务, MoviePilot's add-job) used to bypass the lock.
+		videoType := 0
+		if oneJob.VideoType == common2.Series {
+			videoType = 1
+		}
+		if d.ScanLogic.Get(videoType, oneJob.VideoFPath) == true {
+			// 需要标记忽略
+			oneJob.JobStatus = taskQueue2.Ignore
+			bok, err = d.downloadQueue.Update(oneJob)
+			if err != nil {
+				d.log.Errorln("d.downloadQueue.Update()", err)
 				return
 			}
+			if bok == false {
+				d.log.Errorln("d.downloadQueue.Update() Failed")
+				return
+			}
+			d.log.Infoln("Download Queue Update Job Status To Ignore (video is locked), VideoFPath:", oneJob.VideoFPath)
+			return
 		}
 	}
 	// --------------------------------------------------
@@ -209,7 +206,7 @@ func (d *Downloader) queueDownloaderLocal() {
 					// Record the failure (Waiting + retry interval); a bare return kept this
 					// job at the head of the queue and retried it every 15s forever.
 					d.log.Errorln("SeriesNeedDlSub", err)
-					d.downloadQueue.AutoDetectUpdateJobStatus(oneJob, err)
+					d.jobFinished(oneJob, err)
 					return
 				}
 				needMarkSkip := false
@@ -267,9 +264,6 @@ func (d *Downloader) queueDownloaderLocal() {
 		if err := pkg.ClearRootTmpFolder(); err != nil {
 			d.log.Error("ClearRootTmpFolder", err)
 		}
-		if pkg.LiteMode() == false {
-			pkg.CloseChrome(d.log)
-		}
 		d.log.Infoln(log_helper.OnceSubsScanEnd)
 		d.log.Infoln("------------------------------------------")
 	}()
@@ -318,7 +312,7 @@ func (d *Downloader) queueDownloaderLocal() {
 		// Mark the job failed instead of re-panicking: a re-panic skipped every status
 		// update, so the job stayed queued and was retried every 15 seconds forever.
 		d.log.Errorln("Downloader job panic:", oneJob.VideoFPath, p)
-		d.downloadQueue.AutoDetectUpdateJobStatus(oneJob, fmt.Errorf("panic while downloading: %v", p))
+		d.jobFinished(oneJob, fmt.Errorf("panic while downloading: %v", p))
 	}
 	// No "case <-d.ctx.Done()" on purpose. A running job cannot be interrupted, so returning
 	// on cancel only released downloaderLock while the job went on: after the daemon was
