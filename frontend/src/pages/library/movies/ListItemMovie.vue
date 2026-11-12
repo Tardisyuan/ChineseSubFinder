@@ -1,18 +1,8 @@
 <template>
-  <q-card flat square>
-    <div class="area-cover q-mb-sm relative-position">
-      <div v-if="!posterInfo?.url" :style="{ width, height: coverHeight }"></div>
-      <q-img
-        v-else
-        :src="getUrl(posterInfo.url)"
-        class="content-width bg-grey-2"
-        no-spinner
-        :style="{ width, height: coverHeight }"
-        fit="cover"
-      />
-    </div>
-    <div class="content-width text-ellipsis-line-2" :title="data.name">{{ data.name }}</div>
-    <div class="row items-center">
+  <q-card flat class="bg-transparent">
+    <poster-image :url="posterInfo?.url" icon="movie" />
+    <div class="text-ellipsis-line-2" :title="data.name">{{ data.name }}</div>
+    <div class="row items-center no-wrap">
       <btn-dialog-preview-video
         v-if="hasSubtitle"
         size="sm"
@@ -24,7 +14,7 @@
         <q-btn
           v-if="hasSubtitle"
           size="sm"
-          color="black"
+          color="positive"
           round
           flat
           dense
@@ -37,7 +27,7 @@
               <q-item v-for="(item, index) in detialInfo.sub_url_list" :key="item">
                 <q-item-section side>{{ index + 1 }}.</q-item-section>
 
-                <q-item-section class="overflow-hidden ellipsis" :title="item.split`(/\/|\\/)`.pop()">
+                <q-item-section class="overflow-hidden ellipsis" :title="item.split(/\/|\\/).pop()">
                   <a class="text-primary" :href="getUrl(item)" target="_blank">{{ item.split(/\/|\\/).pop() }}</a>
                 </q-item-section>
                 <q-item-section side>
@@ -95,6 +85,7 @@ import { VIDEO_TYPE_MOVIE } from 'src/constants/SettingConstants';
 import { useQuasar } from 'quasar';
 import { doFixSubtitleTimeline, getUrl, subtitleUploadList } from 'pages/library/use-library';
 import BtnIgnoreVideo from 'pages/library/BtnIgnoreVideo';
+import PosterImage from 'pages/library/PosterImage';
 import BtnUploadSubtitle from 'pages/library/BtnUploadSubtitle';
 import BtnDialogPreviewVideo from 'pages/library/BtnDialogPreviewVideo';
 import BtnDialogSearchSubtitle from 'pages/library/BtnDialogSearchSubtitle';
@@ -102,14 +93,6 @@ import { formModel } from 'pages/settings/use-settings';
 
 const props = defineProps({
   data: Object,
-  width: {
-    type: String,
-    default: '160px',
-  },
-  coverHeight: {
-    type: String,
-    default: '200px',
-  },
 });
 
 const $q = useQuasar();
@@ -186,9 +169,6 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-.content-width {
-  width: v-bind(width);
-}
 .text-ellipsis-line-2 {
   height: 40px;
   overflow: hidden;
@@ -196,12 +176,5 @@ onMounted(() => {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-}
-
-.area-cover:hover {
-  .btn-download {
-    //display: block;
-    opacity: 1;
-  }
 }
 </style>

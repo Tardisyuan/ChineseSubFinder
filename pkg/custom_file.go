@@ -19,7 +19,8 @@ func ReadCustomPortFile(log *logrus.Logger) int {
 			return defPort
 		}
 
-		atoi, err := strconv.Atoi(string(bytes))
+		// `echo 19102 > CustomPort` leaves a trailing newline; Atoi used to reject it and fall back silently
+		atoi, err := strconv.Atoi(strings.TrimSpace(string(bytes)))
 		if err != nil {
 			log.Errorln("Atoi CustomPort Error", err)
 			log.Infoln("Use DefPort", defPort)

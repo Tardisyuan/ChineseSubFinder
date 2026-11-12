@@ -1,40 +1,39 @@
 <template>
-  <q-page class="q-pa-lg">
-    <div class="row q-gutter-md">
+  <q-page class="q-pa-md">
+    <div class="row items-center q-gutter-sm">
       <btn-dialog-library-refresh />
       <btn-dialog-media-server-subtitle-refresh />
-      <q-btn color="primary" @click="setLock(true)" label="锁定" />
-      <q-btn color="primary" @click="setLock(false)" label="取消锁定" />
-      <div v-if="selection.length" class="self-center text-grey">已选中{{ selection.length }}项</div>
+      <q-btn color="primary" outline icon="lock" @click="setLock(true)" label="锁定" />
+      <q-btn color="primary" outline icon="lock_open" @click="setLock(false)" label="取消锁定" />
+      <div v-if="selection.length" class="text-grey">已选中{{ selection.length }}项</div>
       <q-btn v-if="selection.length" color="primary" flat @click="selection = []" label="清空选择" />
 
-      <q-space />
+      <q-space class="gt-xs" />
 
-      <q-input v-model="filterForm.search" outlined dense label="输入关键字搜索">
+      <q-input v-model="filterForm.search" class="col-grow col-sm-auto" outlined dense label="输入关键字搜索">
         <template #append>
           <q-icon name="search" />
         </template>
       </q-input>
     </div>
 
-    <q-separator class="q-my-md" />
-
-    <div v-if="tvs.length" class="row q-gutter-x-md q-gutter-y-lg">
-      <q-intersection v-for="item in filteredTvs" :key="item.root_dir_path" style="width: 160px; height: 280px" once>
-        <div
-          class="item-wrapper cursor-pointer"
-          @click="toggleSelection(item)"
-          :class="{ selected: selection.includes(item.root_dir_path) }"
-        >
-          <list-item-t-v :data="item" :selected="selection" />
-          <q-checkbox
-            :model-value="selection.includes(item.root_dir_path)"
-            class="absolute-top-right no-pointer-events"
-          />
-        </div>
-      </q-intersection>
-    </div>
-    <div v-else class="q-my-md text-grey">当前没有可用视频，点击"更新缓存"按钮可重建缓存</div>
+    <library-list-state :total="tvs.length" :shown="filteredTvs.length" :search="filterForm.search">
+      <div class="media-grid q-mt-md">
+        <q-intersection v-for="item in filteredTvs" :key="item.root_dir_path" style="height: 304px" once>
+          <div
+            class="item-wrapper cursor-pointer relative-position"
+            @click="toggleSelection(item)"
+            :class="{ selected: selection.includes(item.root_dir_path) }"
+          >
+            <list-item-t-v :data="item" :selected="selection" />
+            <q-checkbox
+              :model-value="selection.includes(item.root_dir_path)"
+              class="absolute-top-right no-pointer-events"
+            />
+          </div>
+        </q-intersection>
+      </div>
+    </library-list-state>
   </q-page>
 </template>
 
@@ -42,6 +41,7 @@
 import { useLibrary } from 'pages/library/use-library';
 import { computed, reactive, ref } from 'vue';
 import ListItemTV from 'pages/library/tvs/ListItemTV';
+import LibraryListState from 'pages/library/LibraryListState';
 import BtnDialogLibraryRefresh from 'pages/library/BtnLibraryRefresh';
 import BtnDialogMediaServerSubtitleRefresh from 'pages/library/BtnMediaServerSubtitleRefresh';
 import { SystemMessage } from 'src/utils/message';
@@ -132,8 +132,8 @@ const setLock = async (flag) => {
 <style lang="scss">
 .item-wrapper {
   overflow: hidden;
-  border-radius: 4px;
-  padding: 2px;
+  border-radius: 6px;
+  padding: 4px;
 
   &.selected {
     box-shadow: 0 0 0 2px $primary;

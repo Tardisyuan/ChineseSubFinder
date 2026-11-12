@@ -79,6 +79,10 @@ func getVideoNfoInfo(nfoFilePath string, rootKey string) (types.VideoNfoInfo, er
 		imdbInfo.Title = t.Text()
 		break
 	}
+	for _, t := range doc.FindElements("./" + rootKey + "/originaltitle") {
+		imdbInfo.OriginalTitle = t.Text()
+		break
+	}
 	//---------------------------------------------------------------------
 	// IMDB
 	for _, t := range doc.FindElements("./" + rootKey + "/imdbid") {
@@ -424,7 +428,7 @@ func GetVideoInfoFromFileName(fileName string) (*PTN.TorrentInfo, error) {
 	return parse, nil
 }
 
-//GetVideoInfoFromFileFullPath 从全文件路径推断文件信息，这个应该是次要方案，优先还是从 nfo 文件获取这些信息
+// GetVideoInfoFromFileFullPath 从全文件路径推断文件信息，这个应该是次要方案，优先还是从 nfo 文件获取这些信息
 func GetVideoInfoFromFileFullPath(videoFileFullPath string, isMovie bool) (types.VideoNfoInfo, time.Time, error) {
 
 	var err error
@@ -486,12 +490,68 @@ func GetVideoInfoFromFileFullPath(videoFileFullPath string, isMovie bool) (types
 }
 
 // GetSeasonAndEpisodeFromSubFileName 从文件名推断 季 和 集 的信息 Season Episode，这个应该是次要方案，优先还是从 nfo 文件获取这些信息
+// regSeasonEpisodeLoose matches SxxEyy (upper case input) with any non-alphanumeric neighbours.
+var (
+	regNxM         = regexp.MustCompile(`(?:^|[^0-9])(\d{1,2})X(\d{2,3})(?:[^0-9]|$)`)
+	regCnEpisode   = regexp.MustCompile(`第\s*(\d{1,3})\s*[集话話]`)
+	regCnSeason    = regexp.MustCompile(`第\s*(\d{1,2})\s*季`)
+	regEpOnly      = regexp.MustCompile(`(?:^|[^A-Z0-9])EP?(\d{1,3})(?:[^0-9]|$)`)
+	regDashEpisode = regexp.MustCompile(`\s-\s(\d{2,3})(?:[^0-9P]|$)`)
+	regSeasonOnly  = regexp.MustCompile(`(?:^|[^A-Z0-9])S(\d{1,2})(?:[^0-9]|$)`)
+)
+
+// episodeOnly finds an episode number in names without an SxxEyy tag. name is the original
+// file name (for the Chinese patterns), upper its upper-cased form.
+func episodeOnly(name, upper string) (episode, season int, ok bool) {
+	if m := regNxM.FindStringSubmatch(upper); m != nil {
+		s, _ := strconv.Atoi(m[1])
+		e, _ := strconv.Atoi(m[2])
+		return e, s, e > 0
+	}
+	var m []string
+	if m = regCnEpisode.FindStringSubmatch(name); m == nil {
+		if m = regEpOnly.FindStringSubmatch(upper); m == nil {
+			m = regDashEpisode.FindStringSubmatch(upper)
+		}
+	}
+	if m == nil {
+		return 0, 0, false
+	}
+	e, _ := strconv.Atoi(m[1])
+	if e <= 0 {
+		return 0, 0, false
+	}
+	if sm := regCnSeason.FindStringSubmatch(name); sm != nil {
+		season, _ = strconv.Atoi(sm[1])
+	} else if sm := regSeasonOnly.FindStringSubmatch(upper); sm != nil {
+		season, _ = strconv.Atoi(sm[1])
+	}
+	return e, season, true
+}
+
+var regSeasonEpisodeLoose = regexp.MustCompile(`(?:^|[^A-Z0-9])S(\d{1,2})E(\d{1,3})(?:[^0-9]|$)`)
+
 func GetSeasonAndEpisodeFromSubFileName(videoFileName string) (bool, int, int, error) {
 	upperName := strings.ToUpper(videoFileName)
 	// 先进行单个 Episode 的匹配
 	// Killing.Eve.S02E01.Do.You.Know.How
 	var re = regexp.MustCompile(`(?m)[\.\s]S(\d+).*?E(\d+)[\.\s]`)
 	matched := re.FindAllStringSubmatch(upperName, -1)
+	if matched == nil || len(matched) < 1 {
+		// The pattern above needs "." or a space on both sides, so "S01E02.chs.ass",
+		// "Show.S01E02-GRP.ass" and "Show_S01E02_chs.ass" came back as season 0 episode 0
+		// without an error, and subtitles unpacked from a series archive were filed under
+		// S0E0 and never used.
+		matched = regSeasonEpisodeLoose.FindAllStringSubmatch(upperName, -1)
+	}
+	if matched == nil || len(matched) < 1 {
+		// Episode-only names common in fansub and Chinese archives: "第02集", "EP02", ".E02.",
+		// "1x02", "[Group] Show - 02 [1080p]". Season is taken from "S01" / "第1季" when present,
+		// otherwise 0, and the caller fills in the season it asked for.
+		if ep, season, ok := episodeOnly(videoFileName, upperName); ok {
+			return false, season, ep, nil
+		}
+	}
 	if matched == nil || len(matched) < 1 {
 		// Killing.Eve.S02.Do.You.Know.How
 		// 看看是不是季度字幕打包

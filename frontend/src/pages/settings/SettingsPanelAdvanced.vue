@@ -1,20 +1,233 @@
 <template>
   <div>
-    <q-list dense style="max-width: 600px">
+    <q-list dense class="settings-list">
+      <q-item-label header>字幕挑选</q-item-label>
+
+      <template v-if="form.sub_priority">
+        <q-item>
+          <q-item-section>
+            <q-item-label caption>
+              多个字幕可选时按这个顺序比较：先看版本是否匹配，再看语言偏好，然后是字幕格式，最后是站点顺序。
+            </q-item-label>
+          </q-item-section>
+        </q-item>
+
+        <q-item tag="label" v-ripple>
+          <q-item-section>
+            <q-item-label>优先匹配视频版本</q-item-label>
+            <q-item-label caption>
+              字幕文件名和视频文件名的发布组、片源（如 DSNP、WEB-DL）、分辨率越一致越优先，时间轴更不容易错位。
+              视频文件名里没有这些信息时不起作用。
+            </q-item-label>
+          </q-item-section>
+          <q-item-section avatar>
+            <q-toggle v-model="form.sub_priority.match_release" />
+          </q-item-section>
+        </q-item>
+
+        <q-item class="stack-xs">
+          <q-item-section>
+            <q-item-label>语言偏好</q-item-label>
+          </q-item-section>
+          <q-item-section side>
+            <div class="row">
+              <q-radio v-model="form.sub_priority.language" val="bilingual" label="双语优先" />
+              <q-radio v-model="form.sub_priority.language" val="chs" label="简体优先" />
+              <q-radio v-model="form.sub_priority.language" val="cht" label="繁体优先" />
+            </div>
+          </q-item-section>
+        </q-item>
+      </template>
+
+      <q-item class="stack-xs">
+        <q-item-section>
+          <q-item-label>字幕格式优先级</q-item-label>
+        </q-item-section>
+        <q-item-section side>
+          <div class="row">
+            <q-radio
+              v-for="(v, k) in SUB_TYPE_PRIORITY_NAME_MAP"
+              :key="k"
+              v-model="form.sub_type_priority"
+              :val="~~k"
+              :label="v"
+            />
+          </div>
+        </q-item-section>
+      </q-item>
+
+      <q-item v-if="form.sub_priority" class="stack-xs">
+        <q-item-section top>
+          <q-item-label>站点顺序</q-item-label>
+          <q-item-label caption>越靠上越优先，用箭头调整</q-item-label>
+        </q-item-section>
+        <q-item-section side>
+          <q-list dense bordered separator class="settings-field rounded-borders">
+            <q-item v-for="(site, i) in form.sub_priority.site_order" :key="site">
+              <q-item-section avatar class="text-grey">{{ i + 1 }}</q-item-section>
+              <q-item-section class="text-black">{{ site }}</q-item-section>
+              <q-item-section side>
+                <div class="row no-wrap">
+                  <q-btn
+                    flat
+                    dense
+                    round
+                    size="sm"
+                    icon="arrow_upward"
+                    title="上移"
+                    :disable="i === 0"
+                    @click="moveSite(i, -1)"
+                  />
+                  <q-btn
+                    flat
+                    dense
+                    round
+                    size="sm"
+                    icon="arrow_downward"
+                    title="下移"
+                    :disable="i === form.sub_priority.site_order.length - 1"
+                    @click="moveSite(i, 1)"
+                  />
+                </div>
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </q-item-section>
+      </q-item>
+
+      <q-separator spaced inset></q-separator>
+
+      <q-item-label header>字幕保存</q-item-label>
+
+      <q-item>
+        <q-item-section>
+          <q-item-label>字幕文件的命名格式</q-item-label>
+          <q-item v-for="(v, k) in SUB_NAME_FORMAT_NAME_MAP" :key="k" tag="label" v-ripple>
+            <q-item-section avatar top>
+              <q-radio v-model="form.sub_name_formatter" :val="~~k" />
+            </q-item-section>
+            <q-item-section>
+              <q-item-label>{{ v }}</q-item-label>
+              <q-item-label caption style="word-break: break-all">
+                {{ subNameFormatDescMap[k] }}
+              </q-item-label>
+            </q-item-section>
+          </q-item>
+          <div class="text-caption text-negative">
+            * 修改此选项后需要重启容器，启动阶段会对所有字幕做格式调整，耗时可能较长
+          </div>
+        </q-item-section>
+      </q-item>
+
+      <q-item v-if="SUB_NAME_FORMAT_EMBY === form.sub_name_formatter" tag="label" v-ripple>
+        <q-item-section>
+          <q-item-label>保存多字幕</q-item-label>
+          <q-item-label caption>每个视频保存每个网站找到的最佳字幕，仅 Emby 格式可用</q-item-label>
+        </q-item-section>
+        <q-item-section avatar>
+          <q-toggle v-model="form.save_multi_sub" />
+        </q-item-section>
+      </q-item>
+
       <q-item tag="label" v-ripple>
         <q-item-section>
-          <q-item-label>是否使用代理</q-item-label>
-          <q-item-label caption>支持HTTP代理</q-item-label>
+          <q-item-label>保存整季的缓存字幕</q-item-label>
+        </q-item-section>
+        <q-item-section avatar>
+          <q-toggle v-model="form.save_full_season_tmp_subtitles" />
+        </q-item-section>
+      </q-item>
+
+      <q-item tag="label" v-ripple>
+        <q-item-section>
+          <q-item-label>自动校正字幕时间轴</q-item-label>
+        </q-item-section>
+        <q-item-section avatar>
+          <q-toggle v-model="form.fix_time_line" />
+        </q-item-section>
+      </q-item>
+
+      <q-separator spaced inset></q-separator>
+
+      <q-item-label header>扫描范围</q-item-label>
+
+      <q-item tag="label" v-ripple>
+        <q-item-section>
+          <q-item-label>跳过中文电影</q-item-label>
+        </q-item-section>
+        <q-item-section avatar>
+          <q-toggle v-model="form.scan_logic.skip_chinese_movie" />
+        </q-item-section>
+      </q-item>
+
+      <q-item tag="label" v-ripple>
+        <q-item-section>
+          <q-item-label>跳过中文连续剧</q-item-label>
+        </q-item-section>
+        <q-item-section avatar>
+          <q-toggle v-model="form.scan_logic.skip_chinese_series" />
+        </q-item-section>
+      </q-item>
+
+      <q-item class="stack-xs">
+        <q-item-section top>
+          <q-item-label>自定义视频扩展名</q-item-label>
+          <q-item-label caption>
+            原生支持 mp4、mkv、rmvb、iso、m2ts，其他扩展名在这里添加。要带点并用小写，例如 .ts
+          </q-item-label>
+        </q-item-section>
+        <q-item-section side top>
+          <div v-for="(item, i) in form.custom_video_exts" :key="i" class="row no-wrap items-start q-gutter-x-xs">
+            <q-input
+              v-model="form.custom_video_exts[i]"
+              class="settings-field col"
+              placeholder=".ts"
+              standout
+              dense
+              :rules="[(val) => !!val || '扩展名不能为空']"
+            />
+            <q-btn
+              class="q-mt-xs"
+              icon="remove_circle_outline"
+              color="negative"
+              flat
+              dense
+              round
+              title="删除"
+              @click="form.custom_video_exts.splice(i, 1)"
+            ></q-btn>
+          </div>
+          <q-btn
+            class="self-start"
+            icon="add"
+            label="添加扩展名"
+            color="primary"
+            flat
+            dense
+            @click="form.custom_video_exts.push('')"
+          ></q-btn>
+        </q-item-section>
+      </q-item>
+
+      <q-separator spaced inset></q-separator>
+
+      <q-item-label header>网络</q-item-label>
+
+      <q-item tag="label" v-ripple>
+        <q-item-section>
+          <q-item-label>使用代理</q-item-label>
+          <q-item-label caption>支持 HTTP 和 SOCKS5 代理</q-item-label>
         </q-item-section>
         <q-item-section avatar top>
           <q-toggle v-model="form.proxy_settings.use_proxy" />
         </q-item-section>
       </q-item>
 
-      <q-item v-if="form.proxy_settings.use_proxy" class="q-mt-md" dense>
+      <q-item v-if="form.proxy_settings.use_proxy" dense>
         <q-item-section>
-          <div class="row q-gutter-sm no-wrap">
+          <div class="row q-col-gutter-sm">
             <q-select
+              class="col-4 col-sm-2"
               v-model="form.proxy_settings.use_which_proxy_protocol"
               :options="Object.keys(PROXY_TYPE_NAME_MAP).map((e) => ({ label: PROXY_TYPE_NAME_MAP[e], value: e }))"
               label="协议"
@@ -22,16 +235,36 @@
               dense
               emit-value
               map-options
-              style="width: 100px"
             />
-            <q-input v-model="form.proxy_settings.input_proxy_address" standout dense label="代理服务器" />
-            <q-input v-model="form.proxy_settings.input_proxy_port" standout dense label="代理端口" />
-            <q-input v-model="form.proxy_settings.local_http_proxy_server_port" standout dense label="本地端口" />
+            <q-input
+              class="col-8 col-sm-4"
+              v-model="form.proxy_settings.input_proxy_address"
+              standout
+              dense
+              label="代理服务器"
+            />
+            <q-input
+              class="col-6 col-sm-3"
+              v-model="form.proxy_settings.input_proxy_port"
+              standout
+              dense
+              label="代理端口"
+            />
+            <q-input
+              class="col-6 col-sm-3"
+              v-model="form.proxy_settings.local_http_proxy_server_port"
+              standout
+              dense
+              label="本地端口"
+            />
           </div>
 
-          <div class="q-mt-sm row q-gutter-sm">
-            <q-checkbox v-model="form.proxy_settings.need_pwd" left-label label="账号认证" />
+          <div class="q-mt-xs row q-col-gutter-sm items-center">
+            <div class="col-12 col-sm-auto">
+              <q-checkbox v-model="form.proxy_settings.need_pwd" label="需要账号认证" />
+            </div>
             <q-input
+              class="col-6 col-sm"
               :disable="!form.proxy_settings.need_pwd"
               v-model="form.proxy_settings.input_proxy_username"
               standout
@@ -39,6 +272,7 @@
               label="账号"
             />
             <q-input
+              class="col-6 col-sm"
               :disable="!form.proxy_settings.need_pwd"
               v-model="form.proxy_settings.input_proxy_password"
               standout
@@ -59,276 +293,126 @@
         </q-item-section>
       </q-item>
 
-      <q-separator spaced inset></q-separator>
-
       <q-item tag="label" v-ripple>
         <q-item-section>
-          <q-item-label>调试模式</q-item-label>
+          <q-item-label>启用 TMDB API</q-item-label>
+          <q-item-label caption>用来获取影片的中文片名，部分字幕源要用中文片名搜索</q-item-label>
         </q-item-section>
-        <q-item-section avatar>
-          <q-toggle v-model="form.debug_mode" />
+        <q-item-section avatar top>
+          <q-toggle v-model="form.tmdb_api_settings.enable" />
         </q-item-section>
       </q-item>
 
-      <q-separator spaced inset></q-separator>
-
-      <q-item tag="label" v-ripple>
+      <q-item v-if="form.tmdb_api_settings.enable">
         <q-item-section>
-          <q-item-label>保存整季的缓存字幕</q-item-label>
-        </q-item-section>
-        <q-item-section avatar>
-          <q-toggle v-model="form.save_full_season_tmp_subtitles" />
+          <q-input
+            v-model="form.tmdb_api_settings.api_key"
+            standout
+            dense
+            label="TMDB ApiKey（v3）"
+            hint="请使用 v3 的 ApiKey；国内访问 TMDB API 可能需要代理"
+            :rules="[(val) => (form.tmdb_api_settings.enable && !!val) || '启用 TMDB API 时必须填写 ApiKey']"
+          />
+          <q-checkbox
+            v-model="form.tmdb_api_settings.use_alternate_base_url"
+            label="使用备用的 TMDB API 地址"
+            title="如果连接不上 TMDB API，可以尝试勾选这个选项"
+          />
+          <div class="q-mt-xs">
+            <btn-check-tmdb-api />
+          </div>
         </q-item-section>
       </q-item>
 
-      <q-separator spaced inset></q-separator>
+      <q-separator spaced inset />
+
+      <q-item-label header>下载队列</q-item-label>
 
       <q-item>
         <q-item-section>
-          <q-item-label>字幕格式下载优先级</q-item-label>
-        </q-item-section>
-        <q-item-section avatar>
-          <div class="row">
-            <q-radio
-              v-for="(v, k) in SUB_TYPE_PRIORITY_NAME_MAP"
-              :key="k"
-              v-model="form.sub_type_priority"
-              :val="~~k"
-              :label="v"
+          <div class="row q-col-gutter-x-md">
+            <q-input
+              class="col-12 col-sm-6"
+              v-model.number="form.task_queue.max_retry_times"
+              type="number"
+              label="最大重试次数"
+              hint="单个任务失败超过这个次数后会降一级"
+              standout
+              dense
+              :rules="[(val) => !!val || '不能为空']"
+            />
+            <q-input
+              class="col-12 col-sm-6"
+              v-model.number="form.task_queue.one_job_time_out"
+              type="number"
+              label="单个任务的超时时间"
+              standout
+              dense
+              suffix="秒"
+              :rules="[(val) => !!val || '不能为空']"
+            />
+            <q-input
+              class="col-12 col-sm-6"
+              v-model.number="form.task_queue.interval"
+              type="number"
+              label="下载任务之间的间隔"
+              hint="防止频率太高触发防爬检测"
+              standout
+              dense
+              suffix="秒"
+              :rules="[(val) => !!val || '不能为空']"
+            />
+            <q-input
+              class="col-12 col-sm-6"
+              v-model.number="form.task_queue.one_sub_download_interval"
+              type="number"
+              label="失败后重新下载的最小间隔"
+              standout
+              dense
+              suffix="小时"
+              :rules="[(val) => !!val || '不能为空']"
+            />
+            <q-input
+              class="col-12 col-sm-6"
+              v-model.number="form.task_queue.expiration_time"
+              type="number"
+              label="下载时效"
+              hint="视频创建超过这个天数就不再下载，标记为失败"
+              standout
+              dense
+              suffix="天"
+              :rules="[(val) => !!val || '不能为空']"
+            />
+            <q-input
+              class="col-12 col-sm-6"
+              v-model.number="form.task_queue.download_sub_during_x_days"
+              type="number"
+              label="有内置字幕的视频下载时效"
+              hint="创建超过这个天数且有内置中文字幕的视频不再下载"
+              standout
+              dense
+              suffix="天"
+              :rules="[(val) => !!val || '不能为空']"
             />
           </div>
-        </q-item-section>
-      </q-item>
-
-      <template v-if="form.sub_priority">
-        <q-separator spaced inset></q-separator>
-
-        <q-item>
-          <q-item-section>
-            <q-item-label>字幕挑选优先级</q-item-label>
-            <q-item-label caption>
-              多个字幕可选时按这个顺序比较：先看版本是否匹配，再看语言偏好，然后是字幕格式，最后是站点顺序。
-            </q-item-label>
-          </q-item-section>
-        </q-item>
-
-        <q-item tag="label" v-ripple>
-          <q-item-section>
-            <q-item-label>优先匹配视频版本</q-item-label>
-            <q-item-label caption>
-              字幕文件名和视频文件名的发布组、片源（如 DSNP、WEB-DL）、分辨率越一致越优先，时间轴更不容易错位。
-              视频文件名里没有这些信息时不起作用。
-            </q-item-label>
-          </q-item-section>
-          <q-item-section avatar>
-            <q-toggle v-model="form.sub_priority.match_release" />
-          </q-item-section>
-        </q-item>
-
-        <q-item>
-          <q-item-section>
-            <q-item-label>语言偏好</q-item-label>
-          </q-item-section>
-          <q-item-section avatar>
-            <div class="row">
-              <q-radio v-model="form.sub_priority.language" val="bilingual" label="双语优先" />
-              <q-radio v-model="form.sub_priority.language" val="chs" label="简体优先" />
-              <q-radio v-model="form.sub_priority.language" val="cht" label="繁体优先" />
-            </div>
-          </q-item-section>
-        </q-item>
-
-        <q-item>
-          <q-item-section top>
-            <q-item-label>站点顺序</q-item-label>
-            <q-item-label caption>越靠上越优先</q-item-label>
-          </q-item-section>
-          <q-item-section avatar>
-            <q-list dense bordered separator style="min-width: 220px">
-              <q-item v-for="(site, i) in form.sub_priority.site_order" :key="site">
-                <q-item-section avatar class="text-grey">{{ i + 1 }}</q-item-section>
-                <q-item-section>{{ site }}</q-item-section>
-                <q-item-section side>
-                  <div class="row no-wrap">
-                    <q-btn flat dense round size="sm" icon="arrow_upward" :disable="i === 0" @click="moveSite(i, -1)" />
-                    <q-btn
-                      flat
-                      dense
-                      round
-                      size="sm"
-                      icon="arrow_downward"
-                      :disable="i === form.sub_priority.site_order.length - 1"
-                      @click="moveSite(i, 1)"
-                    />
-                  </div>
-                </q-item-section>
-              </q-item>
-            </q-list>
-          </q-item-section>
-        </q-item>
-      </template>
-
-      <q-separator spaced inset></q-separator>
-
-      <q-item>
-        <q-item-section>
-          <q-item-label>字幕保存的命名格式</q-item-label>
-          <q-item v-for="(v, k) in SUB_NAME_FORMAT_NAME_MAP" :key="k" tag="label" v-ripple>
-            <q-item-section avatar top>
-              <q-radio v-model="form.sub_name_formatter" :val="~~k" />
-            </q-item-section>
-            <q-item-section>
-              <q-item-label>{{ v }}</q-item-label>
-              <q-item-label caption>
-                {{ subNameFormatDescMap[k] }}
-              </q-item-label>
-            </q-item-section>
-          </q-item>
-          <div class="text-negative">* 修改此选项后需要重启容器，启动阶段会对所有字幕的做格式调整，耗时可能较长</div>
-        </q-item-section>
-      </q-item>
-
-      <q-separator spaced inset></q-separator>
-
-      <q-item tag="label" v-ripple>
-        <q-item-section>
-          <q-item-label>跳过中文电影</q-item-label>
-        </q-item-section>
-        <q-item-section avatar>
-          <q-toggle v-model="form.scan_logic.skip_chinese_movie" />
-        </q-item-section>
-      </q-item>
-
-      <q-item tag="label" v-ripple>
-        <q-item-section>
-          <q-item-label>跳过中文连续剧</q-item-label>
-        </q-item-section>
-        <q-item-section avatar>
-          <q-toggle v-model="form.scan_logic.skip_chinese_series" />
-        </q-item-section>
-      </q-item>
-
-      <q-item v-if="SUB_NAME_FORMAT_EMBY === form.sub_name_formatter" tag="label" v-ripple>
-        <q-item-section>
-          <q-item-label>保存多字幕</q-item-label>
-          <q-item-label caption>每个视频下面保存每个网站找到的最佳字幕，需要选择Emby格式</q-item-label>
-        </q-item-section>
-        <q-item-section avatar>
-          <q-toggle v-model="form.save_multi_sub" />
-        </q-item-section>
-      </q-item>
-
-      <q-separator spaced inset></q-separator>
-
-      <q-item>
-        <q-item-section>
-          <q-item-label class="q-mb-sm"> 字幕源设置</q-item-label>
-          <q-item v-for="item in activeSuppliers" :key="item.name" clickable>
-            <q-item-section avatar class="text-bold" style="width: 120px">
-              {{ item.name }}
-            </q-item-section>
-            <q-item-section class="text-grey-8">
-              <q-item-label :lines="1">
-                {{ item.root_url }}
-              </q-item-label>
-              <q-item-label v-if="item.name !== 'csf'" style="font-size: 90%">
-                每日下载次数限制：{{ item.daily_download_limit }}
-              </q-item-label>
-            </q-item-section>
-            <q-item-section side>
-              <edit-sub-source-btn-dialog :data="item" @update="(data) => handleSubSourceUpdate(item, data)" />
-            </q-item-section>
-          </q-item>
-        </q-item-section>
-      </q-item>
-
-      <q-separator spaced inset />
-
-      <q-item>
-        <q-item-section>
-          <q-item-label class="q-mb-sm">队列设置</q-item-label>
           <q-input
-            class="col"
-            v-model.number="form.task_queue.max_retry_times"
-            label="最大重试次数"
-            shadow-text="单个任务失败后，最大重试次数，超过后会降一级"
-            standout
-            dense
-            :rules="[(val) => !!val || '不能为空']"
-          />
-          <q-input
-            class="col"
-            v-model.number="form.task_queue.one_job_time_out"
-            label="任务的超时时间"
-            standout
-            dense
-            suffix="秒"
-            :rules="[(val) => !!val || '不能为空']"
-          />
-          <q-input
-            class="col"
-            v-model.number="form.task_queue.interval"
-            label="下载任务之间的间隔时间"
-            shadow-text="防止频率太高触发防爬检测"
-            standout
-            dense
-            suffix="秒"
-            :rules="[(val) => !!val || '不能为空']"
-          />
-          <q-input
-            class="col"
-            v-model.number="form.task_queue.expiration_time"
-            label="下载时效（天）"
-            shadow-text="视频创建时间在此时间内，才下载，否则标记为失败"
-            standout
-            dense
-            suffix="天"
-            :rules="[(val) => !!val || '不能为空']"
-          />
-          <q-input
-            class="col"
-            v-model.number="form.task_queue.download_sub_during_x_days"
-            label="有内置字幕的视频下载时效"
-            shadow-text="如果创建了 x 天，且有内置的中文字幕，那么也不进行下载了"
-            standout
-            dense
-            suffix="天"
-            :rules="[(val) => !!val || '不能为空']"
-          />
-          <q-input
-            class="col"
-            v-model.number="form.task_queue.one_sub_download_interval"
-            label="单个任务失败后，重新下载的最小间隔（小时）"
-            standout
-            dense
-            suffix="小时"
-            :rules="[(val) => !!val || '不能为空']"
-          />
-          <q-input
-            class="col"
+            class="q-mt-sm"
             v-model="form.task_queue.check_pulic_ip_target_site"
-            label="检查公网IP的目标网站"
-            shadow-text="目标网站必须直接返回ip字符串，不需要额外解析。多个站点用 ;（英文分号） 分割"
+            label="检查公网 IP 的目标网站（可留空）"
+            hint="内置站点失效后才需要填写。网站必须直接返回 IP 字符串，多个站点用英文分号 ; 分隔"
             standout
             dense
           />
-          <div class="text-warning">
-            * 默认内置几个检查ip的网站，默认站点失效后才需要手动设置。内置站点列表：
-            https://myip.biturl.top/;https://ip4.seeip.org/;https://ipecho.net/plain;https://api-ipv4.ip.sb/ip;
-            https://api.ipify.org/;http://myexternalip.com/raw
-          </div>
         </q-item-section>
       </q-item>
 
-      <q-separator spaced inset />
-
-      <q-item>
+      <q-item class="stack-xs q-mt-md">
         <q-item-section>
-          <q-item-label>下载缓存过期时间设置</q-item-label>
+          <q-item-label>下载缓存过期时间</q-item-label>
         </q-item-section>
-        <q-item-section avatar>
-          <div class="row no-wrap q-gutter-xs">
-            <q-input class="col" standout dense v-model.number="form.download_file_cache.ttl"> </q-input>
+        <q-item-section side>
+          <div class="row no-wrap q-gutter-x-xs settings-field">
+            <q-input class="col" standout dense type="number" v-model.number="form.download_file_cache.ttl"> </q-input>
             <q-select
               standout
               dense
@@ -344,99 +428,19 @@
         </q-item-section>
       </q-item>
 
-      <q-separator spaced inset />
-
-      <q-item>
-        <q-item-section class="items-start" top>
-          <q-item-label>自定义视频扩展名</q-item-label>
-          <q-item-label caption>原生支持mp4、mkv、rmvb、iso</q-item-label>
-          <template v-for="(item, i) in form.custom_video_exts" :key="i">
-            <div class="row items-center q-gutter-x-md" :class="{ 'q-mt-md': i === 0 }">
-              <q-input
-                v-model="form.custom_video_exts[i]"
-                placeholder=""
-                standout
-                dense
-                :rules="[(val) => !!val || '不能为空']"
-              />
-              <q-btn
-                icon="remove"
-                color="negative"
-                dense
-                rounded
-                size="xs"
-                title="删除"
-                @click="form.custom_video_exts.splice(i, 1)"
-              ></q-btn>
-            </div>
-          </template>
-        </q-item-section>
-        <q-item-section side top>
-          <q-btn
-            icon="add"
-            color="primary"
-            dense
-            rounded
-            size="xs"
-            title="新增"
-            @click="form.custom_video_exts.push('')"
-          ></q-btn>
-        </q-item-section>
-      </q-item>
-
       <q-separator spaced inset></q-separator>
+
+      <q-item-label header>调试</q-item-label>
 
       <q-item tag="label" v-ripple>
         <q-item-section>
-          <q-item-label>自动校正字幕时间轴</q-item-label>
+          <q-item-label>调试模式</q-item-label>
+          <q-item-label caption>输出 Debug 级别的日志，反馈问题时再打开</q-item-label>
         </q-item-section>
         <q-item-section avatar>
-          <q-toggle v-model="form.fix_time_line" />
+          <q-toggle v-model="form.debug_mode" />
         </q-item-section>
       </q-item>
-
-      <q-separator spaced inset></q-separator>
-
-      <q-item tag="label" v-ripple>
-        <q-item-section>
-          <q-item-label>启用TMDB API</q-item-label>
-          <!--          <q-item-label caption>支持HTTP代理</q-item-label>-->
-        </q-item-section>
-        <q-item-section avatar top>
-          <q-toggle v-model="form.tmdb_api_settings.enable" />
-        </q-item-section>
-      </q-item>
-
-      <template v-if="form.tmdb_api_settings.enable">
-        <q-item>
-          <div class="text-warning">
-            * 国内访问 TMDB API 可能需要代理。目前程序对接的是 TMDB v3 的接口，请使用 v3 的 ApiKey，否则会出问题。
-          </div>
-        </q-item>
-        <q-item class="q-mt-md" dense>
-          <q-item-section>
-            <q-input
-              v-model="form.tmdb_api_settings.api_key"
-              standout
-              dense
-              label="填写 TMDB ApiKey"
-              :rules="[(val) => (form.tmdb_api_settings.enable && !!val) || '不能为空']"
-            />
-          </q-item-section>
-        </q-item>
-        <q-item dense>
-          <q-item-section>
-            <q-checkbox
-              v-model="form.tmdb_api_settings.use_alternate_base_url"
-              label="使用备用的 TMDB API 地址"
-              title="如果连接不上 TMDB API，可以尝试勾选这个选项"
-            />
-          </q-item-section>
-        </q-item>
-        <q-item>
-          <btn-check-tmdb-api />
-        </q-item>
-      </template>
     </q-list>
   </div>
 </template>
@@ -452,9 +456,7 @@ import {
 } from 'src/constants/SettingConstants';
 import { formModel } from 'pages/settings/use-settings';
 import { toRefs } from '@vueuse/core';
-import { computed } from 'vue';
 import ProxyCheckBtn from 'components/ProxyCheckBtn';
-import EditSubSourceBtnDialog from 'pages/settings/BtnDialogEditSubSource';
 import BtnCheckTmdbApi from 'pages/settings/BtnCheckTmdbApi';
 
 const subNameFormatDescMap = {
@@ -469,16 +471,5 @@ const moveSite = (i, delta) => {
   const order = form.value.sub_priority.site_order;
   const j = i + delta;
   [order[i], order[j]] = [order[j], order[i]];
-};
-
-// Sites that are gone or no longer wired in; their settings stay in the config but are not shown.
-const DEAD_SUPPLIERS = ['a4k', 'zimuku', 'subtitle_best', 'csf', 'subhd'];
-const activeSuppliers = computed(() =>
-  Object.values(form.value.suppliers_settings ?? {}).filter((s) => !DEAD_SUPPLIERS.includes(s.name))
-);
-
-const handleSubSourceUpdate = (item, data) => {
-  formModel.advanced_settings.suppliers_settings[item.name].root_url = data.url;
-  formModel.advanced_settings.suppliers_settings[item.name].daily_download_limit = data.dailyLimit;
 };
 </script>

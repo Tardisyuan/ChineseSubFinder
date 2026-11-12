@@ -6,7 +6,6 @@ import (
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/types/backend"
 
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/common"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/settings"
 	"github.com/gin-gonic/gin"
 )
@@ -40,14 +39,6 @@ func (cb *ControllerBase) SettingsHandler(c *gin.Context) {
 				return
 			}
 			pkg.ResetWantedVideoExt()
-			// ----------------------------------------
-			// 设置接口的 API TOKEN
-			if settings.Get().ExperimentalFunction.ApiKeySettings.Enabled == true {
-				common.SetApiToken(settings.Get().ExperimentalFunction.ApiKeySettings.Key)
-			} else {
-				common.SetApiToken("")
-			}
-			// ----------------------------------------
 			c.JSON(http.StatusOK, backend.ReplyCommon{Message: "Settings Save Success"})
 			// 回复完毕后，发送重启 http server 的信号
 			cb.restartSignal <- 1

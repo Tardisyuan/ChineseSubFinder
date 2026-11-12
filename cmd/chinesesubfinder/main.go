@@ -16,7 +16,6 @@ import (
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/internal/backend"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/cache_center"
-	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/common"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/log_helper"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/settings"
 	"github.com/sirupsen/logrus"
@@ -115,13 +114,7 @@ func main() {
 		}
 	}
 	// ------------------------------------------------------------------------
-	// 设置接口的 API TOKEN
 	{
-		if settings.Get().ExperimentalFunction.ApiKeySettings.Enabled == true {
-			common.SetApiToken(settings.Get().ExperimentalFunction.ApiKeySettings.Key)
-		} else {
-			common.SetApiToken("")
-		}
 		// 是否开启开发模式，跳过某些流程
 		settings.Get().SpeedDevMode = false
 		err := settings.Get().Save()

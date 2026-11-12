@@ -48,25 +48,27 @@ func InitRouter(
 	cbV1 := v1.NewControllerBase(cronHelper, restartSignal)
 	// --------------------------------------------------
 	// 静态文件服务器
+	// The media folders are served with directory listing, so they need a login too.
+	static := router.Group("/", middle.CheckStaticAuth())
 	// 添加电影的
 	for i, path := range settings.Get().CommonSettings.MoviePaths {
 
 		nowUrl := "/movie_dir_" + fmt.Sprintf("%d", i)
 		cbV1.SetPathUrlMapItem(path, nowUrl)
-		router.StaticFS(nowUrl, http.Dir(path))
+		static.StaticFS(nowUrl, http.Dir(path))
 	}
 	// 添加连续剧的
 	for i, path := range settings.Get().CommonSettings.SeriesPaths {
 
 		nowUrl := "/series_dir_" + fmt.Sprintf("%d", i)
 		cbV1.SetPathUrlMapItem(path, nowUrl)
-		router.StaticFS(nowUrl, http.Dir(path))
+		static.StaticFS(nowUrl, http.Dir(path))
 	}
 	// --------------------------------------------------
 	// 性能监视
 	if settings.Get().AdvancedSettings.DebugMode == true {
 		// 如果是 DebugMode 那么开启性能监控
-		router.GET("/debug/statsviz/*filepath", func(context *gin.Context) {
+		static.GET("/debug/statsviz/*filepath", func(context *gin.Context) {
 			if context.Param("filepath") == "/ws" {
 				statsviz.Ws(context.Writer, context.Request)
 				return
@@ -87,19 +89,23 @@ func InitRouter(
 
 	router.POST("/change-pwd", middle.CheckAuth(), cbBase.ChangePwdHandler)
 
-	router.POST("/check-path", cbBase.CheckPathHandler)
+	// Needed by the setup wizard before a user exists; once setup is done they need a login,
+	// because they probe the file system and make the server connect to arbitrary addresses.
+	wizard := router.Group("/", middle.CheckAuthIfSetup())
 
-	router.POST("/check-emby-path", cbBase.CheckEmbyPathHandler)
+	wizard.POST("/check-path", cbBase.CheckPathHandler)
 
-	router.POST("/check-proxy", cbBase.CheckProxyHandler)
+	wizard.POST("/check-emby-path", cbBase.CheckEmbyPathHandler)
 
-	router.POST("/check-cron", cbBase.CheckCronHandler)
+	wizard.POST("/check-proxy", cbBase.CheckProxyHandler)
 
-	router.GET("/def-settings", cbBase.DefSettingsHandler)
+	wizard.POST("/check-cron", cbBase.CheckCronHandler)
 
-	router.POST("/check-emby-settings", cbBase.CheckEmbySettingsHandler)
+	wizard.GET("/def-settings", cbBase.DefSettingsHandler)
 
-	router.POST("/check-tmdb-api-settings", cbBase.CheckTmdbApiHandler)
+	wizard.POST("/check-emby-settings", cbBase.CheckEmbySettingsHandler)
+
+	wizard.POST("/check-tmdb-api-settings", cbBase.CheckTmdbApiHandler)
 
 	// v1路由: /v1/xxx
 	GroupV1 := router.Group("/" + cbV1.GetVersion())

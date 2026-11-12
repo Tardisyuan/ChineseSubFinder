@@ -3,17 +3,20 @@
     <q-page-container>
       <q-page class="window-height window-width row justify-center items-center">
         <login-bg-area />
-        <q-form @submit="submit" class="column q-pa-lg">
+        <q-form @submit="submit" class="column q-pa-md">
           <div class="row">
-            <q-card square class="shadow-24" style="width: 400px">
-              <q-card-section class="bg-black">
-                <h4 class="text-h5 text-white q-my-md">系统登录</h4>
+            <q-card class="shadow-24" style="width: 400px; max-width: calc(100vw - 48px)">
+              <q-card-section class="text-center text-white q-py-lg" style="background: var(--csf-drawer-bg)">
+                <img src="icons/logo.png" alt="" style="filter: invert(100%); height: 48px" />
+                <div class="text-h6">ChineseSubFinder</div>
+                <div class="text-caption text-grey-5">系统登录</div>
               </q-card-section>
               <q-card-section>
-                <div class="q-px-sm q-pt-xl">
+                <div class="q-px-sm q-pt-md">
                   <q-input
-                    square
                     v-model="form.username"
+                    autofocus
+                    autocomplete="username"
                     lazy-rules
                     :rules="[(val) => !!val || '用户名不能为空']"
                     label="用户名"
@@ -23,9 +26,9 @@
                     </template>
                   </q-input>
                   <q-input
-                    square
                     v-model="form.password"
                     type="password"
+                    autocomplete="current-password"
                     lazy-rules
                     :rules="[(val) => !!val || '密码不能为空']"
                     label="密码"
@@ -37,7 +40,7 @@
                 </div>
               </q-card-section>
 
-              <q-card-actions class="q-px-lg q-py-md">
+              <q-card-actions class="q-px-lg q-pb-lg">
                 <q-btn
                   unelevated
                   size="lg"

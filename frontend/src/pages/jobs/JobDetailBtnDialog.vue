@@ -3,8 +3,10 @@
 
   <q-dialog v-model="show">
     <q-card style="width: 900px; max-width: 900px">
-      <q-card-section>
-        <div class="text-body1">任务详情</div>
+      <q-card-section class="row items-center">
+        <div class="text-h6">任务详情</div>
+        <q-space />
+        <q-btn icon="close" flat round dense v-close-popup title="关闭" />
       </q-card-section>
 
       <q-separator />
@@ -105,9 +107,16 @@ const show = ref(false);
 
 <style lang="scss" scoped>
 .job-detail-table {
+  td {
+    padding: 3px 0;
+    vertical-align: top;
+    word-break: break-all;
+  }
+
   tr td:first-child {
     padding-right: 20px;
     text-align: right;
+    white-space: nowrap;
     color: $grey;
   }
 }

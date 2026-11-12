@@ -41,8 +41,12 @@ watch(
   }
 );
 
+// Bumped on reset so the page remounts the panels: clears validation errors and panel-local state.
+export const formVersion = ref(0);
+
 export const resetForm = () => {
   Object.assign(formModel, deepCopy(settingsState.settings));
+  formVersion.value += 1;
 };
 
 const getSettings = async () => {

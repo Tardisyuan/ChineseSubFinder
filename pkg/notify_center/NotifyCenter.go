@@ -34,11 +34,10 @@ func (n *NotifyCenter) Send() {
 	if n == nil || n.webhookUrl == "" {
 		return
 	}
-	client := resty.New().SetTransport(&http.Transport{
-		DisableKeepAlives:   true,
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 100,
-	})
+	// one connection for all messages of this send, closed afterwards
+	transport := &http.Transport{MaxIdleConnsPerHost: 2}
+	defer transport.CloseIdleConnections()
+	client := resty.New().SetTransport(transport)
 	for s, s2 := range n.infos {
 		_, err := client.R().Get(n.webhookUrl + s + "/" + url.QueryEscape(s2))
 		if err != nil {

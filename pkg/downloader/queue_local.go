@@ -32,6 +32,12 @@ func (d *Downloader) queueDownloaderLocal() {
 		d.log.Infoln("Wait SupplierCheck Update *subSupplierHub, QueueDownloader Skip this time")
 		return
 	}
+	// Checked before a job is taken: movieDlFunc/seriesDlFunc return early on an empty hub,
+	// and by then the job was already marked Downloading and never left that state.
+	if len(d.subSupplierHub.Suppliers) < 1 {
+		d.log.Infoln("No alive subtitle supplier, QueueDownloader Skip this time")
+		return
+	}
 
 	var downloadCounter int64
 	downloadCounter = 0
@@ -89,7 +95,7 @@ func (d *Downloader) queueDownloaderLocal() {
 					return
 				}
 				if bok == false {
-					d.log.Errorln(fmt.Sprintf("d.downloadQueue.Del(%d) == false", oneJob.Id))
+					d.log.Errorln(fmt.Sprintf("d.downloadQueue.Del(%s) == false", oneJob.Id))
 					return
 				}
 				return
@@ -104,7 +110,7 @@ func (d *Downloader) queueDownloaderLocal() {
 					return
 				}
 				if bok == false {
-					d.log.Errorln(fmt.Sprintf("d.downloadQueue.Del(%d) == false", oneJob.Id))
+					d.log.Errorln(fmt.Sprintf("d.downloadQueue.Del(%s) == false", oneJob.Id))
 					return
 				}
 				return
@@ -126,7 +132,7 @@ func (d *Downloader) queueDownloaderLocal() {
 				return
 			}
 			if bok == false {
-				d.log.Errorln(fmt.Sprintf("d.downloadQueue.Del(%d) == false", oneJob.Id))
+				d.log.Errorln(fmt.Sprintf("d.downloadQueue.Del(%s) == false", oneJob.Id))
 				return
 			}
 			d.log.Infoln(oneJob.VideoFPath, "is missing, Delete This Job")
@@ -137,12 +143,14 @@ func (d *Downloader) queueDownloaderLocal() {
 	// 判断是否看过，这个只有 Emby 情况下才会生效
 	{
 		isPlayed := false
-		if d.embyHelper != nil {
+		if d.embyHelper != nil && oneJob.MediaServerInsideVideoID != "" {
 			// 在拿出来后，如果是有内部媒体服务器媒体 ID 的，那么就去查询是否已经观看过了
 			isPlayed, err = d.embyHelper.IsVideoPlayed(settings.Get().EmbySettings, oneJob.MediaServerInsideVideoID)
 			if err != nil {
-				d.log.Errorln("d.embyHelper.IsVideoPlayed()", oneJob.VideoFPath, err)
-				return
+				// Returning here left the job untouched, so the same job was taken again
+				// every 15s and nothing was downloaded while the media server was down.
+				d.log.Errorln("d.embyHelper.IsVideoPlayed(), treat as not played", oneJob.VideoFPath, err)
+				isPlayed = false
 			}
 		}
 		// TODO 暂时屏蔽掉 http api 提交的已看字幕的接口上传
@@ -198,7 +206,10 @@ func (d *Downloader) queueDownloaderLocal() {
 					oneJob.SeriesRootDirPath,
 					false, false)
 				if err != nil {
+					// Record the failure (Waiting + retry interval); a bare return kept this
+					// job at the head of the queue and retried it every 15s forever.
 					d.log.Errorln("SeriesNeedDlSub", err)
+					d.downloadQueue.AutoDetectUpdateJobStatus(oneJob, err)
 					return
 				}
 				needMarkSkip := false
@@ -250,6 +261,15 @@ func (d *Downloader) queueDownloaderLocal() {
 	d.log.Infoln(log_helper.OnceSubsScanStart + "#" + oneJob.Id)
 	// ------------------------------------------------------------------------
 	defer func() {
+		// 每下载完毕一次，进行一次缓存和 Chrome 的清理
+		// Runs here, still under downloaderLock, not in the job goroutine: there it could
+		// run after the lock was released and wipe the next job's tmp folder.
+		if err := pkg.ClearRootTmpFolder(); err != nil {
+			d.log.Error("ClearRootTmpFolder", err)
+		}
+		if pkg.LiteMode() == false {
+			pkg.CloseChrome(d.log)
+		}
 		d.log.Infoln(log_helper.OnceSubsScanEnd)
 		d.log.Infoln("------------------------------------------")
 	}()
@@ -267,15 +287,6 @@ func (d *Downloader) queueDownloaderLocal() {
 			if p := recover(); p != nil {
 				// Keep the original stack; re-panicking in the caller only shows the select.
 				panicChan <- fmt.Sprintf("%v\n%s", p, debug.Stack())
-			}
-			// 每下载完毕一次，进行一次缓存和 Chrome 的清理
-			err = pkg.ClearRootTmpFolder()
-			if err != nil {
-				d.log.Error("ClearRootTmpFolder", err)
-			}
-
-			if pkg.LiteMode() == false {
-				pkg.CloseChrome(d.log)
 			}
 		}()
 
@@ -308,11 +319,9 @@ func (d *Downloader) queueDownloaderLocal() {
 		// update, so the job stayed queued and was retried every 15 seconds forever.
 		d.log.Errorln("Downloader job panic:", oneJob.VideoFPath, p)
 		d.downloadQueue.AutoDetectUpdateJobStatus(oneJob, fmt.Errorf("panic while downloading: %v", p))
-	case <-d.ctx.Done():
-		{
-			// 取消这个 context
-			d.log.Warningln("cancel Downloader.QueueDownloader()")
-			return
-		}
 	}
+	// No "case <-d.ctx.Done()" on purpose. A running job cannot be interrupted, so returning
+	// on cancel only released downloaderLock while the job went on: after the daemon was
+	// started again the next job ran next to it and one wiped the other's tmp folder.
+	// CronHelper.Stop() therefore waits for the current job (it gives up after 5 minutes).
 }

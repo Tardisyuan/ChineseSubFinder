@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 
@@ -13,7 +14,7 @@ import (
 type Settings struct {
 	SpeedDevMode          bool // 是否为开发模式，代码开启这个会跳过某些流程，加快测试速度
 	configFPath           string
-	UserInfo              *UserInfo              `json:"user_info"`
+	UserInfo              *UserInfo              `json:"user_info" binding:"required"`
 	CommonSettings        *CommonSettings        `json:"common_settings"`
 	SubtitleSources       *SubtitleSources       `json:"subtitle_sources"`
 	AdvancedSettings      *AdvancedSettings      `json:"advanced_settings"`
@@ -78,11 +79,44 @@ func SetFullNewSettings(inSettings *Settings) error {
 	_settingsLocker.Lock()
 	defer _settingsLocker.Unlock()
 
-	nowConfigFPath := _settings.configFPath
+	// A request that leaves sections out (or sends null) must not leave nil pointers in the
+	// global settings, and a failed save must not replace the settings in memory.
+	inSettings.fillNil()
+	inSettings.configFPath = _settings.configFPath
+	if err := inSettings.Save(); err != nil {
+		return err
+	}
 	_settings = inSettings
-	_settings.configFPath = nowConfigFPath
+	return nil
+}
 
-	return _settings.Save()
+// fillNil replaces nil pointers, maps and slices (sections missing or null in a request
+// or in a config file from an older version) with their defaults.
+func (s *Settings) fillNil() {
+	fillNilFrom(reflect.ValueOf(s).Elem(), reflect.ValueOf(NewSettings("")).Elem())
+}
+
+func fillNilFrom(dst, def reflect.Value) {
+	for i := 0; i < dst.NumField(); i++ {
+		f, d := dst.Field(i), def.Field(i)
+		if !f.CanSet() {
+			continue
+		}
+		switch f.Kind() {
+		case reflect.Struct:
+			fillNilFrom(f, d)
+		case reflect.Ptr:
+			if f.IsNil() {
+				f.Set(d)
+			} else if f.Elem().Kind() == reflect.Struct && !d.IsNil() {
+				fillNilFrom(f.Elem(), d.Elem())
+			}
+		case reflect.Map, reflect.Slice:
+			if f.IsNil() {
+				f.Set(d)
+			}
+		}
+	}
 }
 
 // SetConfigRootPath 需要先设置这个信息再调用 Get
@@ -113,6 +147,7 @@ func (s *Settings) read() error {
 	if err != nil {
 		return err
 	}
+	s.fillNil()
 	// 需要检查 url 是否正确
 	newEmbyAddressUrl := removeSuffixAddressSlash(s.EmbySettings.AddressUrl)
 	_, err = url.Parse(newEmbyAddressUrl)
@@ -174,6 +209,7 @@ func (s *Settings) Check() {
 		s.AdvancedSettings.SubPriority = NewSubPriority()
 	}
 	s.AdvancedSettings.SubPriority.Check()
+	s.EmbySettings.Check()
 
 }
 

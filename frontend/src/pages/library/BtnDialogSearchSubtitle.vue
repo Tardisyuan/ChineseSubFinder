@@ -2,10 +2,10 @@
   <q-btn color="primary" icon="search" size="sm" flat dense v-bind="$attrs" @click="visible = true" title="字幕搜索" />
 
   <q-dialog v-model="visible" transition-show="slide-up" transition-hide="slide-down" persistent>
-    <q-card style="min-width: 70vw">
+    <q-card style="width: 900px">
       <q-card-section>
         <div class="row justify-between items-center">
-          <div class="text-h6 text-grey-8">字幕搜索</div>
+          <div class="text-h6">字幕搜索</div>
           <q-btn icon="close" flat round dense @click="visible = false" />
         </div>
         <div class="text-grey">

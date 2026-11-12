@@ -4,26 +4,41 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/settings"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/types/backend"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/common"
 	"github.com/gin-gonic/gin"
 )
 
+// TokenCookieName is the cookie that carries the Web UI access token, for requests the
+// browser makes without the Authorization header (<img>, <a href>, subtitle tracks).
+const TokenCookieName = "csf_token"
+
+// headerToken returns the second field of "Authorization: <scheme> <token>", or "".
+func headerToken(c *gin.Context) string {
+	fields := strings.Fields(c.Request.Header.Get("Authorization"))
+	if len(fields) != 2 {
+		return ""
+	}
+	return fields[1]
+}
+
+func reject(c *gin.Context, message string) {
+	c.JSON(http.StatusUnauthorized, backend.ReplyCheckAuth{Message: message})
+	c.Abort()
+}
+
 func CheckAuth() gin.HandlerFunc {
 
 	return func(context *gin.Context) {
-		authHeader := context.Request.Header.Get("Authorization")
-		fields := strings.Fields(authHeader)
-		if len(fields) != 2 {
-			context.JSON(http.StatusUnauthorized, backend.ReplyCheckAuth{Message: "Request Header Authorization Error"})
-			context.Abort()
+		nowAccessToken := headerToken(context)
+		if nowAccessToken == "" {
+			reject(context, "Request Header Authorization Error")
 			return
 		}
-		nowAccessToken := fields[1]
-		if nowAccessToken == "" || nowAccessToken != common.GetAccessToken() {
-			context.JSON(http.StatusUnauthorized, backend.ReplyCheckAuth{Message: "AccessToken Error"})
-			context.Abort()
+		if nowAccessToken != common.GetAccessToken() {
+			reject(context, "AccessToken Error")
 			return
 		}
 		// 向下传递消息
@@ -31,23 +46,54 @@ func CheckAuth() gin.HandlerFunc {
 	}
 }
 
+// CheckAuthIfSetup is for the endpoints the setup wizard needs before any user exists:
+// open on a fresh install, login required once setup is done.
+func CheckAuthIfSetup() gin.HandlerFunc {
+	checkAuth := CheckAuth()
+	return func(context *gin.Context) {
+		userInfo := settings.Get().UserInfo
+		if userInfo.Username == "" || userInfo.Password == "" {
+			context.Next()
+			return
+		}
+		checkAuth(context)
+	}
+}
+
+// CheckStaticAuth protects the static file routes (media folders, preview cache). The token
+// may come from the Authorization header or from the cookie set at login.
+func CheckStaticAuth() gin.HandlerFunc {
+
+	return func(context *gin.Context) {
+		nowAccessToken := headerToken(context)
+		if nowAccessToken == "" {
+			nowAccessToken, _ = context.Cookie(TokenCookieName)
+		}
+		if nowAccessToken == "" || nowAccessToken != common.GetAccessToken() {
+			reject(context, "AccessToken Error")
+			return
+		}
+		context.Next()
+	}
+}
+
+// CheckApiAuth checks the API key of /api/v1. It reads the key from the settings on every
+// request, so a key saved by setup or a settings change works without further syncing.
 func CheckApiAuth() gin.HandlerFunc {
 
 	return func(context *gin.Context) {
-		authHeader := context.Request.Header.Get("Authorization")
-		if len(authHeader) <= 1 {
-			context.JSON(http.StatusUnauthorized, backend.ReplyCheckAuth{Message: "Request Header Authorization Error"})
-			context.Abort()
+		nowAccessToken := headerToken(context)
+		if nowAccessToken == "" {
+			reject(context, "Request Header Authorization Error")
 			return
 		}
-		nowAccessToken := strings.Fields(authHeader)[1]
-		if nowAccessToken == "" {
-			context.JSON(http.StatusUnauthorized, backend.ReplyCheckAuth{Message: "api_key_enabled == false or api_key is empty"})
-			context.Abort()
+		apiKey := settings.Get().ExperimentalFunction.ApiKeySettings
+		if apiKey.Enabled == false || apiKey.Key == "" {
+			reject(context, "api_key_enabled == false or api_key is empty")
 			return
-		} else if nowAccessToken != common.GetApiToken() {
-			context.JSON(http.StatusUnauthorized, backend.ReplyCheckAuth{Message: "AccessToken Error"})
-			context.Abort()
+		}
+		if nowAccessToken != apiKey.Key {
+			reject(context, "AccessToken Error")
 			return
 		}
 		// 向下传递消息

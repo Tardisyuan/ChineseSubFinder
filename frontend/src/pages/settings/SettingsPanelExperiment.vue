@@ -1,6 +1,6 @@
 <template>
   <div>
-    <q-list style="max-width: 600px" dense>
+    <q-list class="settings-list" dense>
       <q-item>
         <q-item-section>
           <q-item-label>自动转换字幕文件编码</q-item-label>

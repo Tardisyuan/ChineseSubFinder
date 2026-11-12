@@ -64,7 +64,7 @@ func (cb *ControllerBase) ChangeJobStatusHandler(c *gin.Context) {
 	if desJobStatus.TaskPriority == "high" {
 		// high
 		nowOneJob.TaskPriority = task_queue2.HighTaskPriorityLevel
-	} else if desJobStatus.TaskPriority == "mddile" {
+	} else if desJobStatus.TaskPriority == "middle" || desJobStatus.TaskPriority == "mddile" {
 		// middle
 		nowOneJob.TaskPriority = task_queue2.DefaultTaskPriorityLevel
 	} else {
@@ -104,6 +104,11 @@ func (cb *ControllerBase) JobLogHandler(c *gin.Context) {
 		return
 	}
 
+	if reqJobLog.Id != filepath.Base(reqJobLog.Id) {
+		// a job id is never a path; "a/../../x" would read any *.log file on disk
+		c.JSON(http.StatusOK, backend2.ReplyCommon{Message: "job log not found"})
+		return
+	}
 	pathRoot := filepath.Join(pkg.ConfigRootDirFPath(), "Logs")
 	fileFPath := filepath.Join(pathRoot, common.OnceLogPrefix+reqJobLog.Id+".log")
 	if pkg.IsFile(fileFPath) == true {

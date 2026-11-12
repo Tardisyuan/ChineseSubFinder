@@ -20,24 +20,7 @@ func GetAccessToken() string {
 	return accessToken
 }
 
-// SetApiToken 设置 API 接口访问的 Token
-func SetApiToken(newToken string) {
-
-	defer mutexAccessToken.Unlock()
-	mutexAccessToken.Lock()
-	apiToken = newToken
-}
-
-// GetApiToken 获取 API 接口访问的 Token
-func GetApiToken() string {
-
-	defer mutexAccessToken.Unlock()
-	mutexAccessToken.Lock()
-	return apiToken
-}
-
 var (
 	accessToken      = ""
-	apiToken         = ""
 	mutexAccessToken sync.Mutex
 )

@@ -40,6 +40,10 @@ module.exports = configure((ctx) => ({
     'material-icons', // optional, you are not bound to it
   ],
 
+  // The video player libs are only needed by the preview dialog on the library pages.
+  // Keep them out of the vendor chunk that every page load has to download and parse.
+  vendor: { remove: ['hls.js', 'artplayer'] },
+
   // Full list of options: https://v2.quasar.dev/quasar-cli/quasar-conf-js#Property%3A-build
   build: {
     env: envparser(),
@@ -71,11 +75,12 @@ module.exports = configure((ctx) => ({
   // Full list of options: https://v2.quasar.dev/quasar-cli/quasar-conf-js#Property%3A-devServer
   devServer: {
     https: false,
-    port: 10001,
+    port: Number(process.env.CSF_DEV_PORT) || 10001,
     open: false, // opens browser window automatically
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:19035',
+        // override when the backend listens elsewhere (CustomPort), e.g. CSF_DEV_BACKEND=http://127.0.0.1:19102
+        target: process.env.CSF_DEV_BACKEND || 'http://127.0.0.1:19035',
         changeOrigin: true,
         ws: true,
         pathRewrite: {

@@ -22,7 +22,7 @@
   <q-dialog v-model="show" @before-show="handleBeforeShow">
     <q-card
       class="relative-position"
-      style="min-width: 900px"
+      style="width: 900px"
       @dragover="handleDragenter"
       @drop="handleDrop"
       @dragleave="handleDragleave"

@@ -1,36 +1,46 @@
 <template>
   <q-page class="q-pa-md">
-    <q-card v-if="systemState.jobStatus" flat>
-      <header class="row items-center q-gutter-lg">
-        <div>
-          <div>
-            守护进程：
-            <q-badge v-if="isJobRunning" color="positive">运行中</q-badge>
+    <q-card flat bordered class="q-pa-md">
+      <div class="row items-center q-gutter-md">
+        <div class="col">
+          <div class="row items-center q-gutter-x-sm">
+            <span class="text-subtitle1">守护进程</span>
+            <q-spinner v-if="!systemState.jobStatus" color="grey" size="16px" />
+            <q-badge v-else-if="isJobRunning" color="positive">运行中</q-badge>
             <q-badge v-else color="grey">未运行</q-badge>
           </div>
-          <div class="text-grey">用于处理定时任务、启动扫描程序</div>
+          <div class="text-caption text-grey">用于处理定时任务、启动扫描程序</div>
         </div>
-        <div>
-          <q-btn v-if="isJobRunning" label="强制停止" color="negative" @click="stopJobs" :loading="submitting"></q-btn>
-          <q-btn v-else label="立即运行" color="primary" @click="startJobs" :loading="submitting"></q-btn>
-        </div>
-        <q-space />
+        <template v-if="systemState.jobStatus">
+          <q-btn
+            v-if="isJobRunning"
+            label="强制停止"
+            color="negative"
+            outline
+            @click="stopJobs"
+            :loading="submitting"
+          />
+          <q-btn v-else label="立即运行" color="primary" @click="startJobs" :loading="submitting" />
+        </template>
         <q-btn flat dense icon="refresh" label="刷新" :loading="loading" @click="loadOverview" />
-      </header>
+      </div>
     </q-card>
 
     <template v-if="overview">
-      <div class="row q-col-gutter-md q-mt-sm">
+      <div class="row q-col-gutter-md q-mt-none">
         <div v-for="stat in stats" :key="stat.label" class="col-6 col-md-3">
-          <q-card flat bordered class="q-pa-md">
-            <div class="text-caption text-grey-7">{{ stat.label }}</div>
-            <div class="text-h5">{{ stat.value }}</div>
-            <div v-if="stat.hint" class="text-caption text-grey">{{ stat.hint }}</div>
+          <q-card flat bordered class="q-pa-md full-height">
+            <div class="row items-center no-wrap text-caption text-grey">
+              <q-icon :name="stat.icon" size="18px" class="q-mr-xs" />
+              {{ stat.label }}
+            </div>
+            <div class="text-h5 q-mt-xs">{{ stat.value }}</div>
+            <div v-if="stat.hint" class="text-caption" :class="stat.hintClass ?? 'text-grey'">{{ stat.hint }}</div>
           </q-card>
         </div>
       </div>
 
-      <div class="row q-col-gutter-md q-mt-sm">
+      <div class="row q-col-gutter-md q-mt-none">
         <div class="col-12 col-md-7">
           <q-card flat bordered>
             <q-card-section class="row items-center">
@@ -41,7 +51,7 @@
               </div>
             </q-card-section>
             <q-separator />
-            <q-markup-table flat dense>
+            <q-markup-table v-if="overview.suppliers?.length" flat dense>
               <thead>
                 <tr>
                   <th class="text-left">名称</th>
@@ -61,11 +71,9 @@
                     {{ s.today_count }}<span v-if="s.daily_limit > 0" class="text-grey"> / {{ s.daily_limit }}</span>
                   </td>
                 </tr>
-                <tr v-if="!overview.suppliers?.length">
-                  <td colspan="4" class="text-grey">启动后的第一次检查完成前没有数据</td>
-                </tr>
               </tbody>
             </q-markup-table>
+            <empty-state v-else icon="hourglass_empty" title="暂无数据" hint="启动后的第一次检查完成前没有数据" />
           </q-card>
         </div>
 
@@ -73,7 +81,7 @@
           <q-card flat bordered>
             <q-card-section class="text-subtitle1">外部服务</q-card-section>
             <q-separator />
-            <q-list dense>
+            <q-list dense class="q-py-sm">
               <q-item v-for="svc in services" :key="svc.label">
                 <q-item-section>{{ svc.label }}</q-item-section>
                 <q-item-section side>
@@ -89,6 +97,10 @@
         </div>
       </div>
     </template>
+    <empty-state v-else-if="loading" loading title="正在加载总览…" />
+    <empty-state v-else-if="loadError" icon="error_outline" title="总览加载失败" :hint="loadError">
+      <q-btn color="primary" outline label="重试" @click="loadOverview" />
+    </empty-state>
   </q-page>
 </template>
 
@@ -98,21 +110,26 @@ import { useQuasar } from 'quasar';
 import { computed, onMounted, ref } from 'vue';
 import JobApi from 'src/api/JobApi';
 import { SystemMessage } from 'src/utils/message';
+import EmptyState from 'components/EmptyState';
 
 const $q = useQuasar();
 
 const submitting = ref(false);
 const loading = ref(false);
 const overview = ref(null);
+const loadError = ref('');
 
 const loadOverview = async () => {
   loading.value = true;
   const [res, err] = await JobApi.getOverview();
   loading.value = false;
   if (err !== null) {
+    // keep showing the last good data; the full-page error only appears when there is none
+    loadError.value = err.message;
     SystemMessage.error(err.message);
     return;
   }
+  loadError.value = '';
   overview.value = res;
 };
 
@@ -121,11 +138,18 @@ const stats = computed(() => {
   if (!o) return [];
   const jobs = o.jobs ?? {};
   return [
-    { label: '今日下载字幕', value: o.today_downloads, hint: o.today },
-    { label: '今日完成任务', value: o.done_today },
-    { label: '队列中', value: (jobs.waiting ?? 0) + (jobs.downloading ?? 0), hint: `失败 ${jobs.failed ?? 0}` },
+    { label: '今日下载字幕', icon: 'subtitles', value: o.today_downloads, hint: o.today },
+    { label: '今日完成任务', icon: 'task_alt', value: o.done_today },
+    {
+      label: '队列中',
+      icon: 'assignment',
+      value: (jobs.waiting ?? 0) + (jobs.downloading ?? 0),
+      hint: `失败 ${jobs.failed ?? 0}`,
+      hintClass: jobs.failed > 0 ? 'text-negative' : undefined,
+    },
     {
       label: '下次扫描',
+      icon: 'schedule',
       value: o.next_scan_at ? o.next_scan_at.slice(5, 16) : '-',
       hint: o.next_scan_at ? '' : '守护进程未运行',
     },
@@ -154,6 +178,7 @@ const startJobs = () => {
       return;
     }
     getJobsStatus();
+    loadOverview(); // next scan time and queue numbers change with the daemon state
     SystemMessage.success('启动成功');
   });
 };
@@ -171,6 +196,7 @@ const stopJobs = () => {
       return;
     }
     getJobsStatus();
+    loadOverview(); // next scan time and queue numbers change with the daemon state
     SystemMessage.success('停止成功');
   });
 };

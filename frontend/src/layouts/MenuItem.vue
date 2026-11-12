@@ -2,10 +2,9 @@
   <div v-if="menuInfo.meta && menuInfo.meta.title">
     <q-expansion-item
       v-if="menuInfo.children && menuInfo.children.length"
-      expand-separator
       :label="menuInfo.meta.title"
       :icon="menuInfo.meta.icon"
-      :default-opened="defaultOpened"
+      default-opened
     >
       <menu-item class="q-pl-md" v-for="subMenu in menuInfo.children" :menu-info="subMenu" :key="subMenu.name" />
     </q-expansion-item>
@@ -27,11 +26,6 @@ export default defineComponent({
     menuInfo: {
       type: Object,
       required: true,
-    },
-  },
-  computed: {
-    defaultOpened() {
-      return this.$route.matched.some((e) => e.name === this.menuInfo.name);
     },
   },
 });

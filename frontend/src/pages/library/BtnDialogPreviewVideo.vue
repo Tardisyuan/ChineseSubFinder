@@ -24,7 +24,7 @@
           </div>
           <artplayer
             :option="artOption"
-            style="height: 80vh; width: calc(1920 / 1080 * 80vh)"
+            style="height: 80vh; width: calc(1920 / 1080 * 80vh); max-width: 100%"
             @get-instance="handleGetArtInstance"
           ></artplayer>
         </div>
@@ -39,15 +39,16 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
-import Hls from 'hls.js';
+import { computed, defineAsyncComponent, ref } from 'vue';
 import { encode } from 'js-base64';
 import LibraryApi from 'src/api/LibraryApi';
-import Artplayer from 'components/Artplayer';
 import config from 'src/config';
 import { useQuasar } from 'quasar';
 import { getUrl } from 'pages/library/use-library';
 import { userState } from 'src/store/userState';
+
+// artplayer + hls.js are ~400 KB minified: load them when the dialog is first opened, not with the page
+const Artplayer = defineAsyncComponent(() => import('components/Artplayer'));
 
 const $q = useQuasar();
 
@@ -109,7 +110,8 @@ const artOption = computed(() => {
     },
     type: 'm3u8',
     customType: {
-      m3u8(video, url) {
+      async m3u8(video, url) {
+        const { default: Hls } = await import('hls.js');
         if (Hls.isSupported()) {
           const hls = new Hls();
           hls.config.xhrSetup = (xhr) => {

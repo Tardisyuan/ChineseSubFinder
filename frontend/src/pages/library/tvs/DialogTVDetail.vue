@@ -5,8 +5,10 @@
 
   <q-dialog v-model="visible">
     <q-card style="width: 900px; max-width: 900px">
-      <q-card-section>
-        <div class="text-h6">{{ data.name }} 剧集列表</div>
+      <q-card-section class="row items-center no-wrap">
+        <div class="text-h6 ellipsis">{{ data.name }} 剧集列表</div>
+        <q-space />
+        <q-btn icon="close" flat round dense v-close-popup title="关闭" />
       </q-card-section>
 
       <q-tabs v-model="tab" dense active-color="primary" indicator-color="primary" align="justify" narrow-indicator>
@@ -21,8 +23,8 @@
 
       <q-separator />
 
-      <q-card-section style="max-height: 40vh; overflow: auto">
-        <div class="row items-center q-ml-md q-py-none">
+      <q-card-section class="episode-list" style="max-height: 60vh; overflow: auto">
+        <div class="row items-center q-py-none">
           <q-checkbox
             :model-value="selectAllValue"
             indeterminate-value="maybe"
@@ -71,14 +73,16 @@
                 <q-item-section side top>
                   <q-checkbox v-model="selection" :val="item" />
                 </q-item-section>
-                <q-item-section>第 {{ pandStart2(item.episode) }} 集</q-item-section>
+                <q-item-section class="text-no-wrap" style="min-width: max-content"
+                  >第 {{ pandStart2(item.episode) }} 集</q-item-section
+                >
 
                 <q-item-section v-if="item.sub_f_path_list.length" side>
                   <btn-dialog-preview-video :subtitle-url-list="item.sub_url_list" :path="item.video_f_path" />
                 </q-item-section>
 
                 <q-item-section side>
-                  <btn-upload-subtitle :path="item.video_f_path" />
+                  <btn-upload-subtitle :path="item.video_f_path" :dense="$q.screen.lt.sm" />
                 </q-item-section>
 
                 <q-item-section side>
@@ -88,7 +92,7 @@
                 <q-item-section side>
                   <q-btn
                     v-if="item.sub_f_path_list.length"
-                    color="black"
+                    color="positive"
                     round
                     flat
                     dense
@@ -317,3 +321,29 @@ const downloadSelection = () => {
   downloadSubtitle(selection.value);
 };
 </script>
+
+<style lang="scss">
+// seven controls per episode row: tighten the gaps so the row fits a phone
+.episode-list .q-item {
+  padding-left: 0;
+  padding-right: 0;
+
+  .q-item__section--side {
+    padding-right: 4px;
+  }
+}
+
+@media (max-width: $breakpoint-xs-max) {
+  .episode-list {
+    padding: 8px;
+
+    .q-btn {
+      font-size: 12px;
+    }
+
+    .q-item .q-item__section--side {
+      padding-right: 0;
+    }
+  }
+}
+</style>

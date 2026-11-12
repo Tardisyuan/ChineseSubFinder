@@ -1,1 +1,79 @@
 // app global css in SCSS form
+
+// ---- Theme tokens -------------------------------------------------------
+// Light values on :root, dark overrides under body.body--dark (set by Quasar's Dark plugin).
+:root {
+  --csf-page-bg: #f4f6f8;
+  --csf-surface: #fff;
+  --csf-drawer-bg: #111729;
+}
+
+body.body--dark {
+  color-scheme: dark; // native scrollbars and form controls
+  // the AA-safe green is too dim as text on navy, use the lighter brand green there
+  --q-primary: #4faf8b;
+  --csf-page-bg: #{$dark-page};
+  --csf-surface: #{$dark};
+}
+
+body.body--light {
+  background: var(--csf-page-bg);
+}
+
+// ---- Shared look --------------------------------------------------------
+// Flat buttons everywhere: borders and colour carry the hierarchy, not shadows.
+.q-btn:before {
+  box-shadow: none;
+}
+
+.q-btn {
+  text-transform: none;
+}
+
+// Dialog cards ask for a desktop width; never let them overflow a phone screen.
+.q-dialog__inner--minimized > .q-card {
+  max-width: calc(100vw - 32px) !important;
+}
+
+// Responsive poster grid used by the movie and TV lists.
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 20px 16px;
+}
+
+.poster-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(128, 128, 128, 0.15);
+  border-radius: $generic-border-radius;
+  overflow: hidden;
+}
+
+// ---- Dark mode fixes for hard-coded light colours -----------------------
+body.body--dark {
+  .bg-grey-2 {
+    background: rgba(255, 255, 255, 0.06) !important;
+  }
+
+  .text-black,
+  .text-grey-8 {
+    color: inherit !important;
+  }
+
+  // github-markdown-css follows the OS scheme, not the in-app toggle
+  .markdown-body {
+    background: transparent;
+    color: inherit;
+
+    h1,
+    h2 {
+      border-bottom-color: rgba(255, 255, 255, 0.15);
+    }
+
+    code {
+      background: rgba(255, 255, 255, 0.1);
+    }
+  }
+}

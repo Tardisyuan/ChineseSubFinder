@@ -2,7 +2,7 @@
   <q-dialog v-model="visible" persistent>
     <q-card style="width: 800px; max-width: 800px">
       <q-card-section>
-        <div class="text-h6 text-grey-8">新增功能介绍</div>
+        <div class="text-h6">新增功能介绍</div>
       </q-card-section>
 
       <q-separator />

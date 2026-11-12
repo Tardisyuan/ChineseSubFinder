@@ -1,24 +1,14 @@
 <template>
-  <q-card flat square>
-    <div class="area-cover q-mb-sm relative-position">
-      <div v-if="!posterInfo?.url" style="width: 160px; height: 200px"></div>
-      <q-img
-        v-else
-        :src="getUrl(posterInfo.url)"
-        class="content-width bg-grey-2"
-        no-spinner
-        style="width: 160px; height: 200px"
-        fit="cover"
-      />
-    </div>
-    <div class="content-width text-ellipsis-line-2" :title="data.name">{{ data.name }}</div>
+  <q-card flat class="bg-transparent">
+    <poster-image :url="posterInfo?.url" icon="live_tv" />
+    <div class="text-ellipsis-line-2" :title="data.name">{{ data.name }}</div>
     <div class="row items-center">
       <q-space />
       <div>
         <dialog-t-v-detail :data="detailInfo">
           <q-btn
             v-if="hasSubtitleVideoCount > 0"
-            color="black"
+            color="positive"
             flat
             dense
             icon="closed_caption"
@@ -36,7 +26,8 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import DialogTVDetail from 'pages/library/tvs/DialogTVDetail';
 import LibraryApi from 'src/api/LibraryApi';
-import { getUrl, subtitleUploadList } from 'pages/library/use-library';
+import { subtitleUploadList } from 'pages/library/use-library';
+import PosterImage from 'pages/library/PosterImage';
 
 const props = defineProps({
   data: Object,
@@ -84,9 +75,6 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-.content-width {
-  width: 160px;
-}
 .text-ellipsis-line-2 {
   height: 40px;
   overflow: hidden;
@@ -94,18 +82,5 @@ onMounted(() => {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-}
-
-.btn-download {
-  //display: none;
-  opacity: 0;
-  transition: all 0.6s ease;
-}
-
-.area-cover:hover {
-  .btn-download {
-    //display: block;
-    opacity: 1;
-  }
 }
 </style>

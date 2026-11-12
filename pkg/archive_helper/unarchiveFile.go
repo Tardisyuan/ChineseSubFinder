@@ -34,10 +34,13 @@ func UnArchiveFileEx(fileFullPath, desRootPath string) error {
 		needUnzipFileFPaths := make([]string, 0)
 		err = filepath.Walk(desRootPath, func(path string, info fs.FileInfo, err error) error {
 
+			if err != nil {
+				return err // info is nil here
+			}
 			if info.IsDir() == true {
 				return nil
 			}
-			nowExt := filepath.Ext(path)
+			nowExt := strings.ToLower(filepath.Ext(path))
 			// 然后对于解压的内容再次进行判断
 			if nowExt != ".zip" && nowExt != ".tar" && nowExt != ".rar" && nowExt != ".7z" {
 				return nil
@@ -197,11 +200,27 @@ func processOneFile(f archiver.File, notUTF8 bool, desRootPath string) error {
 		//读取到最终的缓冲区中
 		chunk = append(chunk, buf[:n]...)
 	}
-	err := pkg.WriteFile(filepath.Join(desRootPath, decodeName), chunk)
+	desFPath, err := safeJoin(desRootPath, decodeName)
+	if err != nil {
+		return err
+	}
+	err = pkg.WriteFile(desFPath, chunk)
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+// safeJoin joins an archive entry name to the extraction root and rejects names that
+// would land outside it. rar entries carry their full in-archive path, so "../../x.ass"
+// from a downloaded archive could otherwise overwrite any file the process can write.
+func safeJoin(desRootPath, name string) (string, error) {
+	desFPath := filepath.Join(desRootPath, name)
+	rel, err := filepath.Rel(desRootPath, desFPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", errors.New("archive entry outside of the target folder: " + name)
+	}
+	return desFPath, nil
 }
 
 func unArr7z(fileFullPath, desRootPath string) error {
@@ -244,7 +263,7 @@ func un7zOneFile(file *sevenzip.File, desRootPath string) error {
 
 func IsWantedArchiveExtName(fileName string) bool {
 	switch strings.ToLower(filepath.Ext(fileName)) {
-	case ".zip", ".tar", ".rar", "7z":
+	case ".zip", ".tar", ".rar", ".7z":
 		return true
 	default:
 		return false

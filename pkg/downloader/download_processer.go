@@ -128,6 +128,7 @@ func (d *Downloader) seriesDlFunc(ctx context.Context, job taskQueue2.OneJob, do
 		case p := <-panicChan:
 			// 遇到内部的 panic，向外抛出
 			d.log.Errorln("seriesDlFunc.oneVideoSelectBestSub panicChan", p)
+			errSave2Local = fmt.Errorf("panic while saving subtitle: %v", p)
 			break
 		case <-ctx.Done():
 			{
@@ -184,6 +185,7 @@ func (d *Downloader) seriesDlFunc(ctx context.Context, job taskQueue2.OneJob, do
 		case p := <-panicChan:
 			// 遇到内部的 panic，向外抛出
 			d.log.Errorln("seriesDlFunc.oneVideoSelectBestSub panicChan", p)
+			errSave2Local = fmt.Errorf("panic while saving subtitle: %v", p)
 			break
 		case <-ctx.Done():
 			{
@@ -203,6 +205,7 @@ func (d *Downloader) seriesDlFunc(ctx context.Context, job taskQueue2.OneJob, do
 
 	if save2LocalSubCount < 1 {
 		// 下载的字幕都没有一个能够写入到本地的，那么就有问题了
+		errSave2Local = noSubSavedErr(errSave2Local)
 		d.downloadQueue.AutoDetectUpdateJobStatus(job, errSave2Local)
 		return errSave2Local
 	}
@@ -238,4 +241,13 @@ func (d *Downloader) refreshMediaServer(job taskQueue2.OneJob) {
 		return
 	}
 	d.log.Infoln("字幕下载完毕，已通知", name, "刷新目录", dir)
+}
+
+// noSubSavedErr is the job error when no subtitle was written. It is never nil: with a nil
+// error (a panic while saving, or no episode matched) the job used to be marked Done.
+func noSubSavedErr(err error) error {
+	if err == nil {
+		return task_queue.ErrNoSubFound
+	}
+	return err
 }

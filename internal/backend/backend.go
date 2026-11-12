@@ -7,9 +7,11 @@ import (
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/logic/pre_job"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/ChineseSubFinder/ChineseSubFinder/internal/backend/middle"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/local_http_proxy_server"
@@ -73,6 +75,7 @@ func (b *BackEnd) start() {
 	engine := gin.Default()
 	// 默认所有都通过
 	engine.Use(cors.Default())
+	engine.Use(middle.Gzip())
 	// 初始化路由
 	b.preJob = pre_job.NewPreJob(b.logger)
 	cbBase, v1Router := InitRouter(engine, b.cronHelper, b.restartSignal, b.preJob)
@@ -81,6 +84,16 @@ func (b *BackEnd) start() {
 	engine.GET("/", func(c *gin.Context) {
 		c.Header("content-type", "text/html;charset=utf-8")
 		c.String(http.StatusOK, string(dist.SpaIndexHtml))
+	})
+	// js/css/fonts file names carry a content hash, so the browser may keep them for good.
+	// Embedded files have no mod time, so without this header nothing can be revalidated and
+	// every page load downloads the whole UI again.
+	engine.Use(func(c *gin.Context) {
+		for _, prefix := range []string{dist.SpaFolderJS, dist.SpaFolderCSS, dist.SpaFolderFonts} {
+			if strings.HasPrefix(c.Request.URL.Path, prefix+"/") {
+				c.Header("Cache-Control", "public, max-age=31536000, immutable")
+			}
+		}
 	})
 	engine.StaticFS(dist.SpaFolderJS, dist.Assets(dist.SpaFolderName+dist.SpaFolderJS, dist.SpaJS))
 	engine.StaticFS(dist.SpaFolderCSS, dist.Assets(dist.SpaFolderName+dist.SpaFolderCSS, dist.SpaCSS))
@@ -94,7 +107,7 @@ func (b *BackEnd) start() {
 		b.logger.Errorln("GetVideoAndSubPreviewCacheFolder Error:", err)
 		return
 	}
-	engine.StaticFS("/static/preview", http.Dir(previewCacheFolder))
+	engine.Group("/", middle.CheckStaticAuth()).StaticFS("/static/preview", http.Dir(previewCacheFolder))
 	// -----------------------------------------
 	// api 服务
 	engine.Any("/api", func(c *gin.Context) {

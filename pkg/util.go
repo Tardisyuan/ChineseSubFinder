@@ -22,6 +22,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/local_http_proxy_server"
@@ -46,11 +47,8 @@ func NewHttpClient(referer ...string) (*resty.Client, error) {
 	// 随机的 Browser
 	UserAgent = browser.Random()
 	// ------------------------------------------------
-	httpClient := resty.New().SetTransport(&http.Transport{
-		DisableKeepAlives:   true,
-		MaxIdleConns:        1000,
-		MaxIdleConnsPerHost: 1000,
-	})
+	// The transport (connection pool, TLS config, proxy) is shared, see sharedHttpTransport.
+	httpClient := resty.New().SetTransport(sharedHttpTransport(local_http_proxy_server.GetProxyUrl()))
 	httpClient.SetTimeout(common.HTMLTimeOut)
 	httpClient.SetRetryCount(1)
 	// ------------------------------------------------
@@ -67,20 +65,54 @@ func NewHttpClient(referer ...string) (*resty.Client, error) {
 		"Content-Type": "application/json",
 		"User-Agent":   UserAgent,
 	})
-	// ------------------------------------------------
-	// 不要求安全链接
-	httpClient.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
-	// ------------------------------------------------
-	// http 代理
-	HttpProxyAddress := local_http_proxy_server.GetProxyUrl()
-	if HttpProxyAddress != "" {
-		httpClient.SetProxy(HttpProxyAddress)
-	} else {
-		httpClient.RemoveProxy()
-	}
 
 	return httpClient, nil
 }
+
+var (
+	httpTransports      = make(map[string]*http.Transport) // proxy address ("" = direct) -> transport
+	httpTransportsMutex sync.Mutex
+)
+
+// sharedHttpTransport returns the one transport used for a given proxy address.
+// NewHttpClient used to build a new transport with DisableKeepAlives for every client, so every
+// single request paid a fresh TCP + TLS handshake. Sharing the transport lets consecutive requests
+// to the same host reuse the connection. As before: TLS verification is off, the environment proxy
+// is ignored and HTTP/2 is not negotiated. Callers must not modify the transport (no SetProxy etc.).
+func sharedHttpTransport(proxyAddress string) *http.Transport {
+	httpTransportsMutex.Lock()
+	defer httpTransportsMutex.Unlock()
+
+	if transport, found := httpTransports[proxyAddress]; found {
+		return transport
+	}
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 4,
+		IdleConnTimeout:     60 * time.Second,
+		// 不要求安全链接
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	// http 代理
+	if proxyAddress != "" {
+		if proxyUrl, err := url.Parse(proxyAddress); err == nil {
+			transport.Proxy = http.ProxyURL(proxyUrl)
+		}
+	}
+	httpTransports[proxyAddress] = transport
+	return transport
+}
+
+var (
+	publicIPCache      string
+	publicIPCacheKey   string
+	publicIPCacheTime  time.Time
+	publicIPCacheMutex sync.Mutex
+)
+
+// publicIPCacheTTL: the public IP is only used as a key for the daily download counters, and
+// GetPublicIP is called after every downloaded subtitle, so one lookup per 10 minutes is plenty.
+const publicIPCacheTTL = 10 * time.Minute
 
 func getPublicIP(inputSite string) string {
 
@@ -96,7 +128,23 @@ func getPublicIP(inputSite string) string {
 	return response.String()
 }
 
+// GetPublicIP returns the public IP, cached for publicIPCacheTTL (per CheckPublicIPTargetSite value).
 func GetPublicIP(log *logrus.Logger, queue *settings.TaskQueue) string {
+
+	publicIPCacheMutex.Lock()
+	defer publicIPCacheMutex.Unlock()
+
+	if publicIPCacheTime.IsZero() == false && publicIPCacheKey == queue.CheckPublicIPTargetSite &&
+		time.Since(publicIPCacheTime) < publicIPCacheTTL {
+		return publicIPCache
+	}
+	publicIPCache = lookupPublicIP(log, queue)
+	publicIPCacheKey = queue.CheckPublicIPTargetSite
+	publicIPCacheTime = time.Now()
+	return publicIPCache
+}
+
+func lookupPublicIP(log *logrus.Logger, queue *settings.TaskQueue) string {
 
 	defPublicIPSites := []string{
 		"https://myip.biturl.top/",

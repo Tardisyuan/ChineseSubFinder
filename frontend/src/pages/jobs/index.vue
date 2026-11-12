@@ -1,31 +1,27 @@
 <template>
   <q-page class="q-pa-md">
-    <div class="row items-center">
-      <div class="q-gutter-xs">
+    <q-card flat bordered>
+      <div class="row items-center q-pa-md q-gutter-sm">
         <q-btn
           :disable="selected.length === 0"
-          size="md"
           icon="expand_less"
           label="升级"
           color="primary"
+          outline
           @click="batchUpdatePriority('high')"
         />
-
         <q-btn
           :disable="selected.length === 0"
-          size="md"
           icon="expand_more"
           label="降级"
           color="primary"
+          outline
           @click="batchUpdatePriority('low')"
         />
+        <q-btn :disable="selected.length === 0" label="修改状态" color="primary" outline @click="batchUpdateStatus" />
 
-        <q-btn :disable="selected.length === 0" size="md" label="修改状态" color="primary" @click="batchUpdateStatus" />
-      </div>
+        <q-space class="gt-sm" />
 
-      <q-space />
-
-      <div class="q-gutter-sm row">
         <q-select
           label="状态"
           v-model.number="form.status"
@@ -56,43 +52,52 @@
           emit-value
           style="width: 130px"
         ></q-select>
-        <q-input v-model="form.search" outlined label="输入关键字搜索" dense></q-input>
+        <q-input v-model="form.search" class="col-grow col-md-auto" outlined label="输入关键字搜索" dense></q-input>
+        <q-btn flat dense round icon="refresh" title="刷新" :loading="loading" @click="refresh" />
       </div>
-    </div>
 
-    <q-separator class="q-mt-md" />
+      <q-separator />
 
-    <q-table
-      :columns="columns"
-      :rows="filteredData"
-      flat
-      selection="multiple"
-      v-model:selected="selected"
-      class="sticky-column-table"
-      :pagination="{ rowsPerPage: 20 }"
-    >
-      <template v-slot:body-cell-jobStatus="{ row }">
-        <q-td>
-          <span
-            :style="{
-              background: JOB_STATUS_COLOR_MAP[row.job_status],
-              color: 'white',
-              borderRadius: '5px',
-              padding: '2px 6px',
-              fontSize: '12px',
-            }"
-            >{{ JOB_STATUS_MAP[row.job_status] }}</span
-          >
-        </q-td>
-      </template>
+      <q-table
+        :columns="columns"
+        :rows="filteredData"
+        flat
+        selection="multiple"
+        v-model:selected="selected"
+        class="sticky-column-table"
+        :loading="loading"
+        :pagination="{ rowsPerPage: 20 }"
+      >
+        <template v-slot:body-cell-jobStatus="{ row }">
+          <q-td>
+            <q-badge :color="JOB_STATUS_COLOR_MAP[row.job_status]">{{ JOB_STATUS_MAP[row.job_status] }}</q-badge>
+          </q-td>
+        </template>
 
-      <template v-slot:body-cell-actions="{ row }">
-        <q-td>
-          <job-detail-btn-dialog :data="row" />
-          <job-log-btn-dialog :data="row" />
-        </q-td>
-      </template>
-    </q-table>
+        <template v-slot:body-cell-actions="{ row }">
+          <q-td>
+            <job-detail-btn-dialog :data="row" />
+            <job-log-btn-dialog :data="row" />
+          </q-td>
+        </template>
+
+        <template v-slot:no-data>
+          <div class="full-width">
+            <empty-state v-if="loading" loading title="正在加载…" />
+            <empty-state v-else-if="loadError" icon="error_outline" title="队列加载失败" :hint="loadError">
+              <q-btn color="primary" outline label="重试" @click="refresh" />
+            </empty-state>
+            <empty-state v-else-if="data.length" icon="filter_alt_off" title="没有符合筛选条件的任务" />
+            <empty-state
+              v-else
+              icon="assignment"
+              title="下载队列是空的"
+              hint="在“库”里把视频添加到下载队列，或等待下一次扫描"
+            />
+          </div>
+        </template>
+      </q-table>
+    </q-card>
   </q-page>
 </template>
 
@@ -111,8 +116,12 @@ import {
 import { useQuasar } from 'quasar';
 import JobLogBtnDialog from 'pages/jobs/JobLogBtnDialog';
 import JobDetailBtnDialog from 'pages/jobs/JobDetailBtnDialog';
+import EmptyState from 'components/EmptyState';
 
 const $q = useQuasar();
+
+// "2026-11-12T15:02:45+08:00" -> "2026-11-12 15:02:45"
+const formatTime = (val) => val?.replace('T', ' ').slice(0, 19);
 
 const columns = [
   // { label: 'ID', field: 'id' },
@@ -126,8 +135,8 @@ const columns = [
   // { label: '集', field: 'episode' },
   { label: '优先级', field: 'task_priority', align: 'left' },
   // { label: '视频创建时间', field: 'created_time' },
-  { label: '创建时间', field: 'added_time', align: 'left' },
-  { label: '更新时间', field: 'update_time', align: 'left' },
+  { label: '创建时间', field: 'added_time', format: formatTime, align: 'left' },
+  { label: '更新时间', field: 'update_time', format: formatTime, align: 'left' },
   // { label: '媒体服务器ID', field: 'media_server_inside_video_id' },
   { label: '错误信息', field: 'error_info', align: 'left' },
   { label: '下载次数', field: 'download_times', align: 'left' },
@@ -136,6 +145,8 @@ const columns = [
 ];
 
 const data = ref([]);
+const loading = ref(false);
+const loadError = ref('');
 const selected = ref([]);
 const form = reactive({
   search: '',
@@ -159,10 +170,14 @@ const JOB_PRIORITY_NUM2STR_MAP = {
 };
 
 const getData = async () => {
+  loading.value = true;
   const [res, err] = await JobApi.getList();
+  loading.value = false;
   if (err !== null) {
+    loadError.value = err.message;
     SystemMessage.error(err.message);
   } else {
+    loadError.value = '';
     data.value = res.all_jobs;
   }
 };
@@ -294,23 +309,13 @@ onMounted(() => {
 
 <style lang="scss">
 .sticky-column-table {
-  thead tr:last-child th:last-child {
-    background-color: #fff;
-  }
-
-  td:last-child {
-    background-color: #fff;
-  }
-
   th:last-child,
   td:last-child {
     position: sticky;
     right: 0;
     z-index: 1;
-    box-shadow: -5px 0px 5px -1px #ddd;
-  }
-  td:last-child {
-    //border-left: 1px solid $grey-3;
+    background-color: var(--csf-surface);
+    box-shadow: -5px 0 5px -3px rgba(0, 0, 0, 0.15);
   }
 }
 </style>

@@ -86,6 +86,7 @@ func MovieHasChineseSub(logger *logrus.Logger, videoFilePath string) (bool, []st
 	// 所有的中文字幕列表，需要文件名与视频名称一样，也就是 Sub 文件半酣 Video name 即可
 	var chineseSubFitVideoNameFullPathList = make([]string, 0)
 	bFoundChineseSub := false
+	subParserHub := sub_parser_hub.NewSubParserHub(logger, ass.NewParser(logger), srt.NewParser(logger))
 	for _, curFile := range files {
 		if curFile.IsDir() {
 			continue
@@ -96,8 +97,7 @@ func MovieHasChineseSub(logger *logrus.Logger, videoFilePath string) (bool, []st
 			}
 			// 字幕文件是否包含中文
 			subFileFullPath := filepath.Join(dir, curFile.Name())
-			subParserHub := sub_parser_hub.NewSubParserHub(logger, ass.NewParser(logger), srt.NewParser(logger))
-			bFind, subParserFileInfo, err := subParserHub.DetermineFileTypeFromFile(subFileFullPath)
+			bFind, hasChinese, _, err := subParserHub.SubChineseInfo(subFileFullPath)
 			if err != nil {
 				logger.Errorln("DetermineFileTypeFromFile", subFileFullPath, err)
 				continue
@@ -106,7 +106,7 @@ func MovieHasChineseSub(logger *logrus.Logger, videoFilePath string) (bool, []st
 				logger.Warnln("DetermineFileTypeFromFile", subFileFullPath, "not support SubType")
 				continue
 			}
-			if subParserHub.IsSubHasChinese(subParserFileInfo) == true {
+			if hasChinese == true {
 				if bFoundChineseSub == false {
 					bFoundChineseSub = true
 				}

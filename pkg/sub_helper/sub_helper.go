@@ -68,7 +68,9 @@ func OrganizeDlSubFiles(log *logrus.Logger, tmpFolderName string, subInfos []sup
 		} else {
 			// 那么就是需要解压的文件了
 			// 解压，给一个单独的文件夹
-			unzipTmpFolder := filepath.Join(tmpFolderFullPath, subInfos[i].FromWhere)
+			// one folder per archive: with a shared per-site folder, files left from one
+			// archive (e.g. names without an episode) were picked up again with the next one
+			unzipTmpFolder := filepath.Join(tmpFolderFullPath, subInfos[i].FromWhere+"_"+strconv.Itoa(i))
 			err = os.MkdirAll(unzipTmpFolder, os.ModePerm)
 			if err != nil {
 				return nil, err
@@ -93,6 +95,14 @@ func OrganizeDlSubFiles(log *logrus.Logger, tmpFolderName string, subInfos []sup
 					_, nowSeason, nowEps, err := decode.GetSeasonAndEpisodeFromSubFileName(filepath.Base(fileFullPath))
 					if err != nil {
 						continue
+					}
+					if nowSeason == 0 && nowEps > 0 {
+						// episode-only name ("第02集", "EP02"): it belongs to the season this
+						// download was for
+						nowSeason = subInfos[i].Season
+						if nowSeason == 0 {
+							nowSeason = 1
+						}
 					}
 					newSubName := AddFrontName(subInfos[i], filepath.Base(fileFullPath))
 					newSubNameFullPath := filepath.Join(tmpFolderFullPath, newSubName)
@@ -315,7 +325,7 @@ func SearchVideoMatchSubFileAndRemoveExtMark(l *logrus.Logger, oneVideoFullPath 
 	dir := filepath.Dir(oneVideoFullPath)
 	fileName := filepath.Base(oneVideoFullPath)
 	fileName = strings.ToLower(fileName)
-	fileName = strings.ReplaceAll(fileName, filepath.Ext(fileName), "")
+	fileName = strings.TrimSuffix(fileName, filepath.Ext(fileName))
 	pathSep := string(os.PathSeparator)
 	files, err := os.ReadDir(dir)
 	if err != nil {
@@ -337,7 +347,9 @@ func SearchVideoMatchSubFileAndRemoveExtMark(l *logrus.Logger, oneVideoFullPath 
 				continue
 			}
 			// 字幕文件名应该包含 视频文件名（无后缀）
-			if strings.HasPrefix(nowFileName, fileName) == false {
+			// Require the "." after the video name, otherwise "Alien.mkv" also matched (and
+			// stripped .default from) "Aliens.chs.default.ass".
+			if strings.HasPrefix(nowFileName, fileName+".") == false {
 				continue
 			}
 

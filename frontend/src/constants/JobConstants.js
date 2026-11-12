@@ -14,13 +14,14 @@ export const JOB_STATUS_MAP = {
   [JOB_STATUS_IGNORE]: '忽略',
 };
 
+// Quasar colour names (for q-badge), picked so the white label stays readable
 export const JOB_STATUS_COLOR_MAP = {
-  [JOB_STATUS_PENDING]: '#bbb',
-  [JOB_STATUS_IN_PROGRESS]: '#3874CB',
-  [JOB_STATUS_COMPLETED]: '#59B755',
-  [JOB_STATUS_FAILED]: '#EB5451',
-  [JOB_STATUS_DOWNLOADING]: '#3874CB',
-  [JOB_STATUS_IGNORE]: '#F5DA5F',
+  [JOB_STATUS_PENDING]: 'grey-7',
+  [JOB_STATUS_IN_PROGRESS]: 'blue-7',
+  [JOB_STATUS_COMPLETED]: 'positive',
+  [JOB_STATUS_FAILED]: 'negative',
+  [JOB_STATUS_DOWNLOADING]: 'blue-7',
+  [JOB_STATUS_IGNORE]: 'orange-9',
 };
 
 export const JOB_STATUS_OPTIONS = Object.keys(JOB_STATUS_MAP).map((k) => ({

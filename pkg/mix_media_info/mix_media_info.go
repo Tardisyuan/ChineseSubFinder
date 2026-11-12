@@ -2,6 +2,10 @@ package mix_media_info
 
 import (
 	"errors"
+	"fmt"
+	"unicode"
+
+	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/types"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/media_info_dealers"
 
@@ -17,6 +21,17 @@ import (
 )
 
 func GetMixMediaInfo(
+	dealers *media_info_dealers.Dealers,
+	videoFPath string, isMovie bool) (*models.MediaInfo, error) {
+	mediaInfo, err := getMixMediaInfo(dealers, videoFPath, isMovie)
+	if errors.Is(err, media_info_dealers.ErrNoTmdbKey) {
+		// No TMDB key and the shared lookup service is gone: use the titles in the local nfo.
+		return mediaInfoFromNfo(videoFPath, isMovie)
+	}
+	return mediaInfo, err
+}
+
+func getMixMediaInfo(
 	dealers *media_info_dealers.Dealers,
 	videoFPath string, isMovie bool) (*models.MediaInfo, error) {
 	// 从本地读取 IMDB ID 信息，找到基本 ID 信息后，也会去 IMDB web 找到对应的额外信息填充
@@ -52,6 +67,54 @@ func GetMixMediaInfo(
 			return GetMediaInfoAndSave(dealers, imdbInfo, imdbInfo.IMDBID, source, videoType)
 		}
 	}
+}
+
+// mediaInfoFromNfo builds media info from the movie.nfo / tvshow.nfo next to the video. Scrapers
+// such as Jellyfin or MoviePilot usually write the localized title in <title> and the original one
+// in <originaltitle>. The result is not saved, so a TMDB key added later still gets used.
+func mediaInfoFromNfo(videoFPath string, isMovie bool) (*models.MediaInfo, error) {
+	var nfo types.VideoNfoInfo
+	var err error
+	if isMovie {
+		nfo, err = decode.GetVideoNfoInfo4Movie(videoFPath)
+	} else {
+		nfo, err = decode.GetVideoNfoInfoFromEpisode(videoFPath)
+	}
+	if err != nil && nfo.Title == "" {
+		return nil, fmt.Errorf("%w; local nfo has no title either: %v", media_info_dealers.ErrNoTmdbKey, err)
+	}
+	mi := &models.MediaInfo{ImdbId: nfo.ImdbId, TmdbId: nfo.TmdbId, OriginalTitle: nfo.OriginalTitle, Year: nfo.Year}
+	if nfo.Year == "" {
+		mi.Year = nfo.ReleaseDate
+	}
+	for _, title := range []string{nfo.Title, nfo.OriginalTitle} {
+		if title == "" {
+			continue
+		}
+		if hasHan(title) {
+			if mi.TitleCn == "" {
+				mi.TitleCn = title
+			}
+		} else if mi.TitleEn == "" {
+			mi.TitleEn = title
+		}
+	}
+	if mi.TitleCn == "" && mi.TitleEn == "" {
+		return nil, fmt.Errorf("%w; local nfo has no title either", media_info_dealers.ErrNoTmdbKey)
+	}
+	if mi.OriginalTitle == "" {
+		mi.OriginalTitle = nfo.Title
+	}
+	return mi, nil
+}
+
+func hasHan(s string) bool {
+	for _, r := range s {
+		if unicode.Is(unicode.Han, r) {
+			return true
+		}
+	}
+	return false
 }
 
 // GetMediaInfoAndSave 通过 IMDB ID 查询媒体信息，并保存到数据库，IMDB 和 MediaInfo 都会进行保存 // source，options=imdb|tmdb  videoType，options=movie|series

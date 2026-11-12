@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg"
@@ -186,6 +187,16 @@ func (s *Supplier) getSubListFromFile(videoFPath string, isMovie bool) ([]suppli
 		if subInfo.Id == 0 {
 			subInfo.Id = subInfo.FileId
 		}
+		// The download cache is keyed by this string, not by the (short-lived) download URL, so
+		// a cached subtitle needs no detail call. Each assrt call costs a ~20 s rate-limit slot.
+		cacheKey := fmt.Sprintf("%s-%s-%d", s.GetSupplierName(), subInfo.NativeName, subInfo.Id)
+		if found, cached, cacheErr := s.fileDownloader.CacheCenter.DownloadFileGet(cacheKey); cacheErr == nil && found && cached != nil {
+			outSubInfoList = append(outSubInfoList, *cached)
+			if len(outSubInfoList) >= settings.Get().AdvancedSettings.Topic {
+				return outSubInfoList, nil
+			}
+			continue
+		}
 		// 获取具体的下载地址
 		oneSubDetail, err := s.getSubDetail(int(subInfo.Id))
 		if err != nil {
@@ -202,7 +213,7 @@ func (s *Supplier) getSubListFromFile(videoFPath string, isMovie bool) ([]suppli
 		subInfo, err := s.fileDownloader.Get(s.GetSupplierName(), int64(index), videoFileName, nowSubDownloadUrl,
 			0, 0,
 			// 得到一个特殊的替代 FileDownloadUrl 的特征字符串
-			fmt.Sprintf("%s-%s-%d", s.GetSupplierName(), subInfo.NativeName, subInfo.Id),
+			cacheKey,
 		)
 		if err != nil {
 			s.log.Error("FileDownloader.Get", err)
@@ -273,11 +284,29 @@ func (s *Supplier) downloadSub4Series(seriesInfo *series.SeriesInfo) ([]supplier
 	return allSupplierSubInfo, nil
 }
 
+var (
+	apiCallLocker  sync.Mutex
+	lastApiCallEnd time.Time
+)
+
+// waitSearchInterval keeps theSearchInterval between the end of one assrt API call and the start
+// of the next one, across all Supplier instances. Use as `defer s.waitSearchInterval()()`.
+// The old code slept for the whole interval after every call instead, which also delayed the
+// caller when no further assrt call followed (20s per search and per detail lookup).
+func (s *Supplier) waitSearchInterval() func() {
+	apiCallLocker.Lock()
+	if wait := s.theSearchInterval - time.Since(lastApiCallEnd); wait > 0 {
+		time.Sleep(wait)
+	}
+	return func() {
+		lastApiCallEnd = time.Now()
+		apiCallLocker.Unlock()
+	}
+}
+
 func (s *Supplier) getSubByKeyWord(keyword string) (*SearchSubResult, error) {
 
-	defer func() {
-		time.Sleep(s.theSearchInterval)
-	}()
+	defer s.waitSearchInterval()()
 
 	var searchSubResult SearchSubResult
 
@@ -336,9 +365,7 @@ func (s *Supplier) getSubByKeyWord(keyword string) (*SearchSubResult, error) {
 
 func (s *Supplier) getSubDetail(subID int) (OneSubDetail, error) {
 
-	defer func() {
-		time.Sleep(s.theSearchInterval)
-	}()
+	defer s.waitSearchInterval()()
 
 	var subDetail OneSubDetail
 

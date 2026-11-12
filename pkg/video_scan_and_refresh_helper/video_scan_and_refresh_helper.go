@@ -301,6 +301,13 @@ func (v *VideoScanAndRefreshHelper) ScanEmbyMovieAndSeries(scanVideoResult *Scan
 
 // FilterMovieAndSeriesNeedDownload 过滤出需要下载字幕的视频，比如是否跳过中文的剧集，是否超过3个月的下载时间，丢入队列中
 func (v *VideoScanAndRefreshHelper) FilterMovieAndSeriesNeedDownload(scanVideoResult *ScanVideoResult, scanLogic *scan_logic.ScanLogic) error {
+	// write the queue once at the end instead of after every queued video
+	v.downloadQueue.BeginBatch()
+	defer func() {
+		if err := v.downloadQueue.EndBatch(); err != nil {
+			v.log.Errorln("FilterMovieAndSeriesNeedDownload.EndBatch", err)
+		}
+	}()
 
 	if scanVideoResult.Normal != nil && settings.Get().EmbySettings.Enable == false {
 		err := v.filterMovieAndSeriesNeedDownloadNormal(scanVideoResult.Normal, scanLogic)

@@ -28,6 +28,8 @@ type TaskQueue struct {
 	taskKeyMap          *treemap.Map              // 以每个任务的唯一 JobID 来存储每个 Job 的 优先级在哪里，这样可以快速查询
 	taskGroupBySeries   *treemap.Map              // 以每个任务的 SeriesRootPath 来存储每个任务，然后内层是一个 treeset，后续可以遍历删除即可
 	queueLock           sync.Mutex                // 公用这个锁
+	batching            bool                      // inside BeginBatch/EndBatch: save() only marks levels dirty
+	dirty               map[int]bool              // priority levels with unsaved changes while batching
 }
 
 func NewTaskQueue(center *cache_center.CacheCenter) *TaskQueue {
@@ -100,10 +102,11 @@ func (t *TaskQueue) checkPriority(oneJob task_queue2.OneJob) task_queue2.OneJob 
 	return oneJob
 }
 
-// degrade 降一级，会校验范围
+// degrade 降一级，会校验范围。Lower numbers are taken first (0 highest, 5 default), so
+// lowering a job's priority means a larger number; this used to subtract and so raised it.
 func (t *TaskQueue) degrade(oneJob task_queue2.OneJob) task_queue2.OneJob {
 
-	oneJob.TaskPriority -= 1
+	oneJob.TaskPriority += 1
 
 	return t.checkPriority(oneJob)
 }
@@ -124,24 +127,29 @@ func (t *TaskQueue) Add(oneJob task_queue2.OneJob) (bool, error) {
 	// 分配到具体的优先级 map 中
 	t.taskPriorityMapList[oneJob.TaskPriority].Put(oneJob.Id, oneJob)
 	// 如果是连续剧，则需要存储到 taskGroupBySeries 中
-	jobIDSet, found := t.taskGroupBySeries.Get(oneJob.SeriesRootDirPath)
-	if found == false {
-		// 不存在
-		nowJobIDSet := treeset.NewWithStringComparator()
-		nowJobIDSet.Add(oneJob.Id)
-		t.taskGroupBySeries.Put(oneJob.SeriesRootDirPath, nowJobIDSet)
-	} else {
-		// 存在
-		nowJobIDSet := jobIDSet.(*treeset.Set)
-		nowJobIDSet.Add(oneJob.Id)
-		t.taskGroupBySeries.Put(oneJob.SeriesRootDirPath, nowJobIDSet)
-	}
+	t.addToSeriesGroup(oneJob)
 	err := t.save(oneJob.TaskPriority)
 	if err != nil {
 		return false, err
 	}
 
 	return true, nil
+}
+
+func (t *TaskQueue) addToSeriesGroup(oneJob task_queue2.OneJob) {
+	if set, found := t.taskGroupBySeries.Get(oneJob.SeriesRootDirPath); found {
+		set.(*treeset.Set).Add(oneJob.Id)
+		return
+	}
+	set := treeset.NewWithStringComparator()
+	set.Add(oneJob.Id)
+	t.taskGroupBySeries.Put(oneJob.SeriesRootDirPath, set)
+}
+
+func (t *TaskQueue) removeFromSeriesGroup(seriesRootDirPath, jobId string) {
+	if set, found := t.taskGroupBySeries.Get(seriesRootDirPath); found {
+		set.(*treeset.Set).Remove(jobId)
+	}
 }
 
 // update 更新素，不存在则会失败，内部用，没有锁
@@ -156,6 +164,14 @@ func (t *TaskQueue) update(oneJob task_queue2.OneJob) (bool, error) {
 	// 这里需要判断是否有优先级的 Update，如果有就需要把之前缓存的表给更新
 	// 然后再插入到新的表中
 	taskPriorityIndex, _ := t.taskKeyMap.Get(oneJob.Id)
+	// keep the series grouping in step when the job's series folder changed; otherwise
+	// del() looked in the wrong group, failed, and the job could never be removed
+	if prevObj, ok := t.taskPriorityMapList[taskPriorityIndex.(int)].Get(oneJob.Id); ok {
+		if prev := prevObj.(task_queue2.OneJob); prev.SeriesRootDirPath != oneJob.SeriesRootDirPath {
+			t.removeFromSeriesGroup(prev.SeriesRootDirPath, oneJob.Id)
+			t.addToSeriesGroup(oneJob)
+		}
+	}
 	// 检查权限范围
 	oneJob = t.checkPriority(oneJob)
 	if oneJob.TaskPriority != taskPriorityIndex {
@@ -221,6 +237,9 @@ func (t *TaskQueue) AutoDetectUpdateJobStatus(oneJob task_queue2.OneJob, inErr e
 				oneJob.RetryTimes = 0
 				oneJob.TaskPriority = FirstRetryTaskPriorityLevel
 			} else {
+				// count this failed retry; nothing incremented it before, so the downgrade
+				// below never happened
+				oneJob.RetryTimes++
 				if oneJob.RetryTimes > settings.Get().AdvancedSettings.TaskQueue.MaxRetryTimes {
 					// 超过重试次数会进行一次降级，然后重置这个次数
 					oneJob.RetryTimes = 0
@@ -272,12 +291,8 @@ func (t *TaskQueue) del(jobId string) (bool, error) {
 		return false, nil
 	}
 	needDelJob := needDelJobObj.(task_queue2.OneJob)
-	jobSetsObj, bok := t.taskGroupBySeries.Get(needDelJob.SeriesRootDirPath)
-	if bok == false {
-		return false, nil
-	}
-	jobSets := jobSetsObj.(*treeset.Set)
-	jobSets.Remove(jobId)
+	// a missing group (queue data from older versions) must not block the delete
+	t.removeFromSeriesGroup(needDelJob.SeriesRootDirPath, jobId)
 	// 删除任务
 	t.taskKeyMap.Remove(jobId)
 	t.taskPriorityMapList[taskPriority.(int)].Remove(jobId)
@@ -387,8 +402,41 @@ func (t *TaskQueue) afterRead() {
 	}
 }
 
+// BeginBatch defers writing priority levels to disk until EndBatch. Every Add/Update rewrites
+// its whole level (JSON + sqlite row), so queueing N jobs in a row cost O(N^2): 12 s for 4000
+// jobs. A library scan wraps its enqueue loop in a batch and writes each touched level once.
+// Changes made during a batch are lost if the process dies before EndBatch; the next scan
+// queues them again.
+func (t *TaskQueue) BeginBatch() {
+	defer t.queueLock.Unlock()
+	t.queueLock.Lock()
+	t.batching = true
+	if t.dirty == nil {
+		t.dirty = map[int]bool{}
+	}
+}
+
+// EndBatch writes every level changed since BeginBatch.
+func (t *TaskQueue) EndBatch() error {
+	defer t.queueLock.Unlock()
+	t.queueLock.Lock()
+	t.batching = false
+	var firstErr error
+	for level := range t.dirty {
+		if err := t.save(level); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		delete(t.dirty, level)
+	}
+	return firstErr
+}
+
 // save 需要把改变的数据保持到 K/V 数据库中，这个没有锁，所以需要在 Sync 中使用，不对外开放
 func (t *TaskQueue) save(taskPriority int) error {
+	if t.batching {
+		t.dirty[taskPriority] = true
+		return nil
+	}
 
 	b, err := t.taskPriorityMapList[taskPriority].ToJSON()
 	if err != nil {

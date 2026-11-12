@@ -44,8 +44,9 @@ func (c *CacheCenter) TaskQueueSave(taskPriority int, taskQueueBytes []byte) err
 			RelPath:  relPath,
 		}
 		c.db.Save(&nowTaskQueue)
-	} else {
-		// 存在，需要更新
+	} else if taskQueues[0].RelPath != relPath {
+		// 存在，需要更新 (the path is fixed per priority, so normally there is nothing to write;
+		// skipping the no-op UPDATE saves one sqlite commit per queue change)
 		taskQueues[0].RelPath = relPath
 		c.db.Save(&taskQueues[0])
 	}

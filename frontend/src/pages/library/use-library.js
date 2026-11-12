@@ -25,6 +25,9 @@ const tvs = computed(() =>
   }))
 );
 export const libraryRefreshStatus = ref(null);
+// first list request finished (ok or not) / message of the last failed one
+export const libraryLoaded = ref(false);
+export const libraryError = ref('');
 export const subtitleUploadList = ref([]);
 
 export const refreshCacheLoading = computed(() => libraryRefreshStatus.value === 'running');
@@ -33,17 +36,20 @@ let getRefreshStatusTimer = null;
 
 export const getLibraryRefreshStatus = async () => {
   const [res] = await LibraryApi.getRefreshStatus();
-  libraryRefreshStatus.value = res.status;
+  libraryRefreshStatus.value = res?.status;
 };
 
 export const getLibraryList = async () => {
   const [res, err] = await LibraryApi.getList();
   if (err !== null) {
+    libraryError.value = err.message;
     SystemMessage.error(err.message);
   } else {
+    libraryError.value = '';
     originMovies.value = res.movie_infos_v2;
     originTvs.value = res.season_infos_v2;
   }
+  libraryLoaded.value = true;
 };
 
 export const checkLibraryRefreshStatus = async () => {

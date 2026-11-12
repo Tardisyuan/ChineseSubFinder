@@ -1,6 +1,6 @@
 <template>
   <div>
-    <q-list dense style="max-width: 600px">
+    <q-list dense class="settings-list">
       <q-item tag="label" v-ripple>
         <q-item-section>
           <q-item-label>连接媒体服务器</q-item-label>
@@ -12,73 +12,91 @@
       </q-item>
 
       <template v-if="form.enable">
-        <q-item>
+        <q-item class="stack-xs">
           <q-item-section>
             <q-item-label>服务器类型</q-item-label>
           </q-item-section>
-          <q-item-section avatar>
+          <q-item-section side>
             <q-select
               v-model="form.server_type"
               :options="serverTypeOptions"
               emit-value
               map-options
+              class="settings-field"
               standout
               dense
-              style="min-width: 180px"
             />
           </q-item-section>
         </q-item>
-        <q-item>
+        <q-item class="stack-xs">
           <q-item-section>
             <q-item-label>服务器内网地址</q-item-label>
             <q-item-label caption>例如 http://192.168.1.10:8096</q-item-label>
           </q-item-section>
-          <q-item-section avatar>
+          <q-item-section side>
             <q-input
               v-model="form.address_url"
+              class="settings-field"
+              placeholder="http://192.168.1.10:8096"
               standout
               dense
+              hide-bottom-space
               :rules="[
-                (val) => (form.enable && !!val) || '不能为空',
-                (val) => /^https?:\/\/[\w.-]+(:[0-9]+)?(\/[\w.-]*)*\/?$/.test(val) || '请输入正确的URL',
+                (val) => (form.enable && !!val) || '请填写服务器地址',
+                (val) =>
+                  /^https?:\/\/[\w.-]+(:[0-9]+)?(\/[\w.-]*)*\/?$/.test(val) || '地址要以 http:// 或 https:// 开头',
               ]"
             />
           </q-item-section>
         </q-item>
-        <q-item>
+        <q-item class="stack-xs">
           <q-item-section>
             <q-item-label>API Key</q-item-label>
             <q-item-label caption>{{ apiKeyHint }}</q-item-label>
           </q-item-section>
-          <q-item-section avatar>
-            <q-input v-model="form.api_key" standout dense :rules="[(val) => (form.enable && !!val) || '不能为空']" />
+          <q-item-section side>
+            <q-input
+              v-model="form.api_key"
+              class="settings-field"
+              standout
+              dense
+              hide-bottom-space
+              :rules="[(val) => (form.enable && !!val) || '请填写 API Key']"
+            />
           </q-item-section>
         </q-item>
 
         <q-item> <btn-check-emby-server /> </q-item>
-        <q-item>
+
+        <q-separator spaced inset></q-separator>
+
+        <q-item-label header>同步选项</q-item-label>
+
+        <q-item class="stack-xs">
           <q-item-section>
-            <q-item-label>获取最多的剧集数量</q-item-label>
+            <q-item-label>每次最多获取的视频数量</q-item-label>
+            <q-item-label caption>从服务器读取“最近新增”视频时的数量上限</q-item-label>
           </q-item-section>
-          <q-item-section avatar>
+          <q-item-section side>
             <q-input
               v-model.number="form.max_request_video_number"
+              class="settings-field"
+              type="number"
               standout
               dense
-              :rules="[(val) => (form.enable && !!val) || '不能为空', (val) => /^\d+$/.test(val) || '必须是整数']"
+              hide-bottom-space
+              :rules="[(val) => (form.enable && !!val) || '不能为空', (val) => /^\d+$/.test(val) || '必须是正整数']"
             />
           </q-item-section>
         </q-item>
         <q-item tag="label" v-ripple>
           <q-item-section>
-            <q-item-label>是否跳过已观看的</q-item-label>
+            <q-item-label>跳过已观看的视频</q-item-label>
           </q-item-section>
           <q-item-section avatar>
             <q-toggle v-model="form.skip_watched" />
           </q-item-section>
         </q-item>
-
-        <q-separator spaced inset></q-separator>
 
         <q-item :class="{ disabled: form.auto_or_manual }" tag="label" v-ripple>
           <q-item-section>
@@ -91,27 +109,33 @@
 
         <q-separator spaced inset></q-separator>
 
+        <q-item-label header>路径映射</q-item-label>
+
         <q-item>
           <q-item-section>
-            <q-item-label>路径映射</q-item-label>
             <q-item-label caption>
               下载完字幕后会通知 {{ form.server_type === 'jellyfin' ? 'Jellyfin' : 'Emby' }}
               刷新视频所在目录。如果它看到的路径和这里不同（两个容器挂载点不一样），在右边填它看到的路径；留空表示相同。
             </q-item-label>
           </q-item-section>
         </q-item>
-        <q-item v-for="row in mappingRows" :key="`${row.kind}:${row.path}`">
+        <q-item v-if="!mappingRows.length">
           <q-item-section>
-            <q-item-label>{{ row.path }}</q-item-label>
+            <q-item-label caption>还没有媒体目录，请先在“基础配置”里添加电影或连续剧目录。</q-item-label>
+          </q-item-section>
+        </q-item>
+        <q-item v-for="row in mappingRows" :key="`${row.kind}:${row.path}`" class="stack-xs">
+          <q-item-section>
+            <q-item-label style="word-break: break-all">{{ row.path }}</q-item-label>
             <q-item-label caption>{{ row.kind === 'movie' ? '电影目录' : '连续剧目录' }}</q-item-label>
           </q-item-section>
-          <q-item-section avatar>
+          <q-item-section side>
             <q-input
               v-model="form[row.field][row.path]"
+              class="settings-field--wide"
               :placeholder="row.path"
               standout
               dense
-              style="min-width: 240px"
             />
           </q-item-section>
         </q-item>

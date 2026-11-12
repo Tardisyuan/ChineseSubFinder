@@ -32,31 +32,35 @@ func SortStringSliceByLength(m []string) PathSlices {
 // -----------------------------------------------------------------------------
 
 // SortByModTime 根据文件的 Mod Time 进行排序，递减
+// Each file is stat'ed once up front; the old Less() stat'ed both files (twice each) on every
+// comparison, i.e. ~4*n*log2(n) stats for n files, which dominated a library scan.
 func SortByModTime(fileList []string) []string {
 
-	byModTime := make(ByModTime, 0)
-	byModTime = append(byModTime, fileList...)
+	byModTime := byModTime{paths: append(make([]string, 0, len(fileList)), fileList...), modTimes: make([]time.Time, len(fileList))}
+	for i, p := range byModTime.paths {
+		byModTime.modTimes[i] = GetFileModTime(p)
+	}
 	sort.Sort(sort.Reverse(byModTime))
 
-	return byModTime
+	return byModTime.paths
 }
 
-type ByModTime []string
-
-func (fis ByModTime) Len() int {
-	return len(fis)
+type byModTime struct {
+	paths    []string
+	modTimes []time.Time
 }
 
-func (fis ByModTime) Swap(i, j int) {
-	fis[i], fis[j] = fis[j], fis[i]
+func (fis byModTime) Len() int {
+	return len(fis.paths)
 }
 
-func (fis ByModTime) Less(i, j int) bool {
+func (fis byModTime) Swap(i, j int) {
+	fis.paths[i], fis.paths[j] = fis.paths[j], fis.paths[i]
+	fis.modTimes[i], fis.modTimes[j] = fis.modTimes[j], fis.modTimes[i]
+}
 
-	aModTime := GetFileModTime(fis[i])
-	bModTime := GetFileModTime(fis[j])
-
-	return aModTime.Before(bModTime)
+func (fis byModTime) Less(i, j int) bool {
+	return fis.modTimes[i].Before(fis.modTimes[j])
 }
 
 func GetFileModTime(fileFPath string) time.Time {

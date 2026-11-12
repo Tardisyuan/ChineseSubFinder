@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg"
 
@@ -23,6 +24,7 @@ type CacheCenter struct {
 	cacheName                string
 	db                       *gorm.DB
 	locker                   sync.Mutex
+	lastDownloadFileCleanup  time.Time // see DownloadFileCleanExpired
 }
 
 func NewCacheCenter(cacheName string, Log *logrus.Logger) *CacheCenter {
@@ -50,6 +52,7 @@ func NewCacheCenter(cacheName string, Log *logrus.Logger) *CacheCenter {
 	if err != nil {
 		panic(fmt.Sprintf("db AutoMigrate error, %s", err.Error()))
 	}
+	c.DownloadFileCleanExpired()
 	return &c
 }
 

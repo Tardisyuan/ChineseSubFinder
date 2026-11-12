@@ -66,7 +66,7 @@ func readSeriesInfo(dealers *media_info_dealers.Dealers, seriesDir string, need2
 
 		for _, subFile := range subFiles {
 
-			bFind, subParserFileInfo, err := subParserHub.DetermineFileTypeFromFile(subFile)
+			bFind, hasChinese, subLang, err := subParserHub.SubChineseInfo(subFile)
 			if err != nil {
 				dealers.Logger.Errorln("DetermineFileTypeFromFile", subFile, err)
 				continue
@@ -76,7 +76,7 @@ func readSeriesInfo(dealers *media_info_dealers.Dealers, seriesDir string, need2
 				continue
 			}
 			// 判断这个字幕是否包含中文
-			if subParserHub.IsSubHasChinese(subParserFileInfo) == false {
+			if hasChinese == false {
 				continue
 			}
 			epsKey := pkg.GetEpisodeKeyName(epsVideoNfoInfo.Season, epsVideoNfoInfo.Episode)
@@ -84,7 +84,7 @@ func readSeriesInfo(dealers *media_info_dealers.Dealers, seriesDir string, need2
 				Title:        epsVideoNfoInfo.Title,
 				Season:       epsVideoNfoInfo.Season,
 				Episode:      epsVideoNfoInfo.Episode,
-				Language:     subParserFileInfo.Lang,
+				Language:     subLang,
 				Dir:          filepath.Dir(subFile),
 				FileFullPath: subFile,
 			}

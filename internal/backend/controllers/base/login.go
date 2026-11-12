@@ -3,6 +3,7 @@ package base
 import (
 	"net/http"
 
+	"github.com/ChineseSubFinder/ChineseSubFinder/internal/backend/middle"
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg"
 
 	backend2 "github.com/ChineseSubFinder/ChineseSubFinder/pkg/types/backend"
@@ -40,6 +41,10 @@ func (cb *ControllerBase) LoginHandler(c *gin.Context) {
 		// 用户账号密码匹配
 		nowAccessToken := pkg.GenerateAccessToken()
 		common.SetAccessToken(nowAccessToken)
+		// The static file routes (posters, subtitles) are requested by the browser without
+		// the Authorization header, so the token also goes into a cookie.
+		c.SetSameSite(http.SameSiteStrictMode)
+		c.SetCookie(middle.TokenCookieName, nowAccessToken, 30*24*3600, "/", "", false, true)
 		c.JSON(http.StatusOK, backend2.ReplyLogin{AccessToken: nowAccessToken,
 			Settings: *settings.Get().GetNoPasswordSettings()})
 		return
