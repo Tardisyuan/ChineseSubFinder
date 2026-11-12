@@ -1,10 +1,9 @@
 package v1
 
 import (
-	"errors"
-	"fmt"
 	"net/http"
 	"path/filepath"
+	"time"
 
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg"
 
@@ -17,6 +16,41 @@ import (
 	"github.com/ChineseSubFinder/ChineseSubFinder/pkg/decode"
 	"github.com/gin-gonic/gin"
 )
+
+const msgWaitingNfo = "waiting for nfo, the job is queued once the episode and tvshow nfo exist"
+
+// how long addWhenNfoReady waits for the scraper; vars so tests can shorten them
+var nfoWaitTick, nfoWaitMax = 10 * time.Second, 5 * time.Minute
+
+// fillSeriesJob sets season, episode and series root from the nfo files; false when the
+// episode nfo or tvshow.nfo is not there yet.
+func fillSeriesJob(job *TTaskqueue.OneJob) bool {
+	root := decode.GetSeriesDirRootFPath(job.VideoFPath)
+	nfo, err := decode.GetVideoNfoInfo4OneSeriesEpisode(job.VideoFPath)
+	if root == "" || err != nil {
+		return false
+	}
+	job.Season, job.Episode, job.SeriesRootDirPath = nfo.Season, nfo.Episode, root
+	return true
+}
+
+// addWhenNfoReady queues a series job as soon as its nfo files exist. After nfoWaitMax it
+// gives up; the regular library scan still finds the episode later.
+// ponytail: one goroutine per waiting episode and lost on restart, fine for a season pack.
+func (cb *ControllerBase) addWhenNfoReady(job TTaskqueue.OneJob) {
+	for waited := time.Duration(0); waited < nfoWaitMax; waited += nfoWaitTick {
+		time.Sleep(nfoWaitTick)
+		if fillSeriesJob(&job) {
+			if _, err := cb.cronHelper.DownloadQueue.Add(job); err != nil {
+				cb.log.Errorln("AddJobHandler queue after nfo:", job.VideoFPath, err)
+				return
+			}
+			cb.log.Infoln("AddJobHandler nfo ready, queued:", job.VideoFPath)
+			return
+		}
+	}
+	cb.log.Warningln("AddJobHandler no nfo after", nfoWaitMax, "not queued, the next scan will pick it up:", job.VideoFPath)
+}
 
 // AddJobHandler 外部 API 接口添加任务的处理
 func (cb *ControllerBase) AddJobHandler(c *gin.Context) {
@@ -58,21 +92,12 @@ func (cb *ControllerBase) AddJobHandler(c *gin.Context) {
 		videoListAdd.MediaServerInsideVideoID,
 	)
 
-	if videoListAdd.VideoType == 1 {
-		// 连续剧
-		// 连续剧的时候需要额外提交信息
-		epsVideoNfoInfo, err := decode.GetVideoNfoInfo4OneSeriesEpisode(videoListAdd.PhysicalVideoFileFullPath)
-		if err != nil {
-			return
-		}
-		seriesInfoDirPath := decode.GetSeriesDirRootFPath(videoListAdd.PhysicalVideoFileFullPath)
-		if seriesInfoDirPath == "" {
-			err = errors.New(fmt.Sprintf("decode.GetSeriesDirRootFPath == Empty, %s", videoListAdd.PhysicalVideoFileFullPath))
-			return
-		}
-		nowJob.Season = epsVideoNfoInfo.Season
-		nowJob.Episode = epsVideoNfoInfo.Episode
-		nowJob.SeriesRootDirPath = seriesInfoDirPath
+	if videoListAdd.VideoType == 1 && fillSeriesJob(nowJob) == false {
+		// MoviePilot sends TransferComplete before its scraper has written the nfo files, so
+		// the episode is queued once they show up instead of failing the request.
+		go cb.addWhenNfoReady(*nowJob)
+		c.JSON(http.StatusOK, backend2.ReplyJobThings{JobID: nowJob.Id, Message: msgWaitingNfo})
+		return
 	}
 
 	bok, err := cb.cronHelper.DownloadQueue.Add(*nowJob)

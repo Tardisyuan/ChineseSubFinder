@@ -201,3 +201,35 @@ func TestAddJobAnswersLocked(t *testing.T) {
 		t.Fatalf("queue size after unlock = %d", n)
 	}
 }
+
+// MoviePilot posts an episode before its scraper wrote the nfo files: the request gets a
+// job id at once and the job is queued when the nfo files appear.
+func TestAddJobWaitsForSeriesNfo(t *testing.T) {
+	nfoWaitTick, nfoWaitMax = 20*time.Millisecond, 5*time.Second
+	defer func() { nfoWaitTick, nfoWaitMax = 10*time.Second, 5*time.Minute }()
+
+	cb := newTestController(t)
+	root := filepath.Join(t.TempDir(), "Show (2024)")
+	video := filepath.Join(root, "Season 1", "Show.S01E02.mkv")
+	_ = os.MkdirAll(filepath.Dir(video), 0755)
+	if err := os.WriteFile(video, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	reply := post(t, cb.AddJobHandler, gin.H{"video_type": 1, "physical_video_file_full_path": video, "task_priority_level": 3})
+	if reply["message"] != msgWaitingNfo || reply["job_id"] == "" {
+		t.Fatalf("reply without nfo: %v", reply)
+	}
+	if n := cb.cronHelper.DownloadQueue.Size(); n != 0 {
+		t.Fatalf("queued before the nfo exists: %d", n)
+	}
+
+	_ = os.WriteFile(filepath.Join(root, "tvshow.nfo"), []byte(`<tvshow><title>Show</title></tvshow>`), 0644)
+	_ = os.WriteFile(filepath.Join(root, "Season 1", "Show.S01E02.nfo"),
+		[]byte(`<episodedetails><title>Ep</title><season>1</season><episode>2</episode></episodedetails>`), 0644)
+	for i := 0; i < 100 && cb.cronHelper.DownloadQueue.Size() == 0; i++ {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if n := cb.cronHelper.DownloadQueue.Size(); n != 1 {
+		t.Fatalf("queue size after the nfo appeared = %d", n)
+	}
+}
