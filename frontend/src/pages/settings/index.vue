@@ -127,7 +127,8 @@ useSettings();
     position: sticky;
     bottom: 0;
     z-index: 1;
-    background: #fff;
+    // theme surface, not #fff: in dark mode the bar stayed white and the light button text vanished
+    background: var(--csf-surface);
     border-top: 1px solid rgba(0, 0, 0, 0.12);
   }
 
@@ -153,5 +154,9 @@ useSettings();
       width: 100%;
     }
   }
+}
+
+body.body--dark .settings-page .settings-submit {
+  border-top-color: rgba(255, 255, 255, 0.12);
 }
 </style>

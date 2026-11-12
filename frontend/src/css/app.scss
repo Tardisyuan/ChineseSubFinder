@@ -53,7 +53,8 @@ body.body--light {
 
 // ---- Dark mode fixes for hard-coded light colours -----------------------
 body.body--dark {
-  .bg-grey-2 {
+  .bg-grey-2,
+  .bg-grey-3 {
     background: rgba(255, 255, 255, 0.06) !important;
   }
 

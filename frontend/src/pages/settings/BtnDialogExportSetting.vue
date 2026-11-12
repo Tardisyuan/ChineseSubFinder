@@ -1,5 +1,5 @@
 <template>
-  <q-btn label="导出" @click="visible = true" />
+  <q-btn label="导出" outline color="primary" @click="visible = true" />
   <q-dialog v-model="visible">
     <q-card style="width: 800px; max-width: 800px">
       <q-card-section>
